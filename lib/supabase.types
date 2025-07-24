@@ -1,0 +1,355 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export interface Database {
+  public: {
+    Tables: {
+      walkers: {
+        Row: {
+          id: string
+          name: string
+          email: string
+          school: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          email: string
+          school: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          email?: string
+          school?: string
+          created_at?: string | null
+        }
+        Select: {
+          id: string
+          name: string
+          email: string
+          school: string
+          created_at: string | null
+        }
+      }
+      survey_submissions: {
+        Row: {
+          id: string
+          walker_id: string
+          date_walked: string
+          submitted_at: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          walker_id: string
+          date_walked: string
+          submitted_at?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          walker_id?: string
+          date_walked?: string
+          submitted_at?: string | null
+          created_at?: string | null
+        }
+        Select: {
+          id: string
+          walker_id: string
+          date_walked: string
+          submitted_at: string | null
+          created_at: string | null
+        }
+      }
+      survey_responses: {
+        Row: {
+          id: string
+          submission_id: string
+          survey_category: string
+          question_key: string
+          question_text: string
+          item_index: number
+          answer_choice: string
+          response: 'Yes' | 'No' | 'Does Not Apply' | 'Not Able to View'
+          elaboration: string | null
+          category: string | null
+          subcategory: string | null
+          created_at: string | null
+          has_photo: boolean | null
+        }
+        Insert: {
+          id?: string
+          submission_id: string
+          survey_category: string
+          question_key: string
+          question_text: string
+          item_index: number
+          answer_choice: string
+          response: 'Yes' | 'No' | 'Does Not Apply' | 'Not Able to View'
+          elaboration?: string | null
+          category?: string | null
+          subcategory?: string | null
+          created_at?: string | null
+          has_photo?: boolean | null
+        }
+        Update: {
+          id?: string
+          submission_id?: string
+          survey_category?: string
+          question_key?: string
+          question_text?: string
+          item_index?: number
+          answer_choice?: string
+          response?: 'Yes' | 'No' | 'Does Not Apply' | 'Not Able to View'
+          elaboration?: string | null
+          category?: string | null
+          subcategory?: string | null
+          created_at?: string | null
+          has_photo?: boolean | null
+        }
+        Select: {
+          id: string
+          submission_id: string
+          survey_category: string
+          question_key: string
+          question_text: string
+          item_index: number
+          answer_choice: string
+          response: 'Yes' | 'No' | 'Does Not Apply' | 'Not Able to View'
+          elaboration: string | null
+          category: string | null
+          subcategory: string | null
+          created_at: string | null
+          has_photo: boolean | null
+        }
+      }
+      classroom_entries: {
+        Row: {
+          id: string
+          submission_id: string
+          survey_category: string
+          room_number: string
+          grade_served: string
+          is_portable: boolean
+          ceiling_height: string
+          completed: boolean | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          submission_id: string
+          survey_category: string
+          room_number: string
+          grade_served: string
+          is_portable: boolean
+          ceiling_height: string
+          completed?: boolean | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          submission_id?: string
+          survey_category?: string
+          room_number?: string
+          grade_served?: string
+          is_portable?: boolean
+          ceiling_height?: string
+          completed?: boolean | null
+          created_at?: string | null
+        }
+        Select: {
+          id: string
+          submission_id: string
+          survey_category: string
+          room_number: string
+          grade_served: string
+          is_portable: boolean
+          ceiling_height: string
+          completed: boolean | null
+          created_at: string | null
+        }
+      }
+      classroom_responses: {
+        Row: {
+          id: string
+          classroom_entry_id: string
+          question_key: string
+          question_text: string
+          item_index: number
+          answer_choice: string
+          response: 'Yes' | 'No' | 'Does Not Apply' | 'Not Able to View'
+          elaboration: string | null
+          category: string | null
+          subcategory: string | null
+          created_at: string | null
+          has_photo: boolean | null
+        }
+        Insert: {
+          id?: string
+          classroom_entry_id: string
+          question_key: string
+          question_text: string
+          item_index: number
+          answer_choice: string
+          response: 'Yes' | 'No' | 'Does Not Apply' | 'Not Able to View'
+          elaboration?: string | null
+          category?: string | null
+          subcategory?: string | null
+          created_at?: string | null
+          has_photo?: boolean | null
+        }
+        Update: {
+          id?: string
+          classroom_entry_id?: string
+          question_key?: string
+          question_text?: string
+          item_index?: number
+          answer_choice?: string
+          response?: 'Yes' | 'No' | 'Does Not Apply' | 'Not Able to View'
+          elaboration?: string | null
+          category?: string | null
+          subcategory?: string | null
+          created_at?: string | null
+          has_photo?: boolean | null
+        }
+        Select: {
+          id: string
+          classroom_entry_id: string
+          question_key: string
+          question_text: string
+          item_index: number
+          answer_choice: string
+          response: 'Yes' | 'No' | 'Does Not Apply' | 'Not Able to View'
+          elaboration: string | null
+          category: string | null
+          subcategory: string | null
+          created_at: string | null
+          has_photo: boolean | null
+        }
+      }
+      survey_photos: {
+        Row: {
+          id: string
+          submission_id: string
+          survey_category: string
+          question_key: string | null
+          room_number: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          mime_type: string | null
+          caption: string | null
+          uploaded_at: string | null
+          created_at: string | null
+          location_x: number | null
+          location_y: number | null
+          floor_level: string | null
+        }
+        Insert: {
+          id?: string
+          submission_id: string
+          survey_category: string
+          question_key?: string | null
+          room_number?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          mime_type?: string | null
+          caption?: string | null
+          uploaded_at?: string | null
+          created_at?: string | null
+          location_x?: number | null
+          location_y?: number | null
+          floor_level?: string | null
+        }
+        Update: {
+          id?: string
+          submission_id?: string
+          survey_category?: string
+          question_key?: string | null
+          room_number?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          mime_type?: string | null
+          caption?: string | null
+          uploaded_at?: string | null
+          created_at?: string | null
+          location_x?: number | null
+          location_y?: number | null
+          floor_level?: string | null
+        }
+        Select: {
+          id: string
+          submission_id: string
+          survey_category: string
+          question_key: string | null
+          room_number: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          mime_type: string | null
+          caption: string | null
+          uploaded_at: string | null
+          created_at: string | null
+          location_x: number | null
+          location_y: number | null
+          floor_level: string | null
+        }
+      }
+      survey_categories: {
+        Row: {
+          id: string
+          name: string
+          is_multi_entry: boolean | null
+          description: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          is_multi_entry?: boolean | null
+          description?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          is_multi_entry?: boolean | null
+          description?: string | null
+          created_at?: string | null
+        }
+         Select: {
+          id: string
+          name: string
+          is_multi_entry: boolean | null
+          description: string | null
+          created_at: string | null
+        }
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      gen_random_uuid: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
