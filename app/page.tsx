@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { ChevronRight, Check, User, Mail, Calendar, Plus, Trash2, Building, Calculator } from "lucide-react"
+import { ChevronRight, Check, User, Mail, Calendar, Plus, Trash2, Building, Calculator, Camera, LogOut } from "lucide-react"
 import { saveAllSurveyData } from "../lib/database"
 import { MessageSquare } from "lucide-react"
 import { PhotoUpload } from "../components/photo-upload"
@@ -17,6 +17,7 @@ import Image from "next/image"
 import { QuestionNavigation } from "../components/question-navigation"
 import { generateQuestionId } from "../lib/utils"
 import Link from "next/link"
+import { sessionUtils, type UserSession } from "../lib/session"
 
 interface SurveyQuestion {
   survey: string
@@ -96,73 +97,21 @@ export default function SurveyApp() {
   const [loading, setLoading] = useState(true)
   const [selectedSurvey, setSelectedSurvey] = useState<string>("")
   const [currentSubmissionId, setCurrentSubmissionId] = useState<string | null>(null)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [sessionChecked, setSessionChecked] = useState(false)
 
   // Add progress tracking state
   const [surveyProgress, setSurveyProgress] = useState<Record<string, boolean>>({})
 
-  // Define all required surveys
+  // Define simplified survey categories
   const ALL_REQUIRED_SURVEYS = [
-    "Close Out",
-    "General Classrooms",
-    "Specialized Classrooms",
-    "Special Education Classrooms",
-    "Shared Spaces",
-    "Library, Extended Learning",
-    "Assembly Spaces",
-    "Site Elements",
-    "Staff Elements",
+    "Photo Documentation",
   ]
 
-  // Function to check if a survey is completed - Updated logic
+  // Simplified survey completion logic
   const isSurveyCompleted = (surveyName: string): boolean => {
-    if (MULTI_ENTRY_SURVEYS.includes(surveyName)) {
-      // For multi-entry categories, check if at least one entry is completed
-      const entries = classroomEntries[surveyName] || []
-      const hasCompletedEntry = entries.some((entry) => entry.completed)
-      console.log(
-        `Survey ${surveyName}: ${entries.length} entries, ${entries.filter((e) => e.completed).length} completed`,
-      )
-      return hasCompletedEntry
-    } else {
-      // For regular surveys, check if all questions are answered
-      const currentSurveyQuestions = Object.entries(groupedData).filter(([_, questions]) =>
-        questions.some((q) => q.survey === surveyName),
-      )
-
-      if (currentSurveyQuestions.length === 0) {
-        console.log(`Survey ${surveyName}: No questions found`)
-        return false
-      }
-
-      const isComplete = currentSurveyQuestions.every(([questionKey, questions]) => {
-        return questions.every((question, itemIndex) => {
-          // Only check questions that belong to this survey
-          if (question.survey !== surveyName) return true
-
-          const choices =
-            question.answerChoices && question.answerChoices !== "To be updated"
-              ? question.answerChoices
-                  .split(",")
-                  .map((c) => c.trim())
-                  .filter(Boolean)
-              : [question.question]
-
-          return choices.every((choice) => {
-            const responseKey = `${questionKey}-${itemIndex}`
-            const surveyResponses = responses[responseKey] || []
-            const response = surveyResponses.find((r) => r.questionId === responseKey && r.answerChoice === choice)
-            const hasResponse = response && response.response
-            if (!hasResponse) {
-              console.log(`Missing response for ${surveyName}: ${questionKey} - ${choice}`)
-            }
-            return hasResponse
-          })
-        })
-      })
-
-      console.log(`Survey ${surveyName}: ${isComplete ? "Complete" : "Incomplete"}`)
-      return isComplete
-    }
+    // For photo documentation, consider it always complete
+    return true
   }
 
   // Function to update survey progress
@@ -180,12 +129,9 @@ export default function SurveyApp() {
     return Object.values(surveyProgress).filter(Boolean).length
   }
 
-  // Check if all surveys are completed - More lenient
+  // Check if all surveys are completed - Simplified
   const areAllSurveysCompleted = (): boolean => {
-    const completedCount = getCompletedSurveysCount()
-    console.log(`Completed surveys: ${completedCount}/${ALL_REQUIRED_SURVEYS.length}`)
-    // Allow viewing scores if at least 8 out of 9 surveys are completed
-    return completedCount >= 8
+    return true // Always allow access since we only have photo documentation
   }
 
   // Store walker info for scoring page access
@@ -203,6 +149,47 @@ export default function SurveyApp() {
         behavior: "smooth",
       })
     }, 100)
+  }
+
+  const createSubmissionForSession = async (session: any) => {
+    try {
+      const walkerInfoForSubmission = {
+        name: session.name,
+        email: "",
+        dateWalked: new Date().toISOString().split("T")[0],
+        school: "",
+      }
+      
+      const result = await saveAllSurveyData(
+        walkerInfoForSubmission,
+        walkerInfoForSubmission.dateWalked,
+        {}, // empty responses initially
+        {}, // empty classroom entries initially
+        groupedData,
+      )
+
+      if (result.success) {
+        setCurrentSubmissionId(result.submissionId)
+        console.log("Created submission for restored session:", result.submissionId)
+      } else {
+        console.error("Failed to create submission for restored session:", result.error)
+      }
+    } catch (error) {
+      console.error("Error creating submission for restored session:", error)
+    }
+  }
+
+  const handleLogout = () => {
+    sessionUtils.clearSession()
+    setIsLoggedIn(false)
+    setShowSurvey(false)
+    setWalkerInfo({
+      name: "",
+      email: "",
+      dateWalked: new Date().toISOString().split("T")[0],
+      school: "",
+    })
+    setCurrentSubmissionId(null)
   }
 
   // Get unique survey categories for the filter
@@ -270,6 +257,23 @@ export default function SurveyApp() {
 
   useEffect(() => {
     fetchSurveyData()
+    
+    // Check for existing session
+    const session = sessionUtils.getSession()
+    if (session) {
+      setWalkerInfo({
+        name: session.name,
+        email: "",
+        dateWalked: new Date().toISOString().split("T")[0], // Always use current date
+        school: "",
+      })
+      setIsLoggedIn(true)
+      setShowSurvey(true)
+      
+      // Create a new submission for the restored session
+      createSubmissionForSession(session)
+    }
+    setSessionChecked(true)
   }, [])
 
   // Update progress when responses or classroom entries change
@@ -285,30 +289,8 @@ export default function SurveyApp() {
   }, [walkerInfo])
 
   const fetchSurveyData = async () => {
-    try {
-      const response = await fetch(
-        "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/EAQuestionsV2-RFM7CW7A1nU9bLu2m6TOUOBB4Ok7sZ.csv",
-      )
-      const csvText = await response.text()
-
-      const parsed = parseCSV(csvText)
-
-      setSurveyData(parsed)
-
-      const grouped = groupByQuestion(parsed)
-      setGroupedData(grouped)
-
-      // Set first survey category as default
-      const firstSurvey = [...new Set(parsed.map((item) => item.survey))][0]
-      if (firstSurvey) {
-        setSelectedSurvey(firstSurvey)
-      }
-
-      setLoading(false)
-    } catch (error) {
-      console.error("Error fetching survey data:", error)
-      setLoading(false)
-    }
+    // Skip fetching survey data - we don't need questions
+    setLoading(false)
   }
 
   const parseCSV = (text: string): SurveyQuestion[] => {
@@ -364,7 +346,7 @@ export default function SurveyApp() {
   }
 
   const canStartSurvey = () => {
-    return walkerInfo.name && walkerInfo.email && walkerInfo.dateWalked && walkerInfo.school
+    return walkerInfo.name.trim() !== ""
   }
 
   const handleStartSurvey = async () => {
@@ -384,7 +366,17 @@ export default function SurveyApp() {
 
         if (result.success) {
           setCurrentSubmissionId(result.submissionId)
+          
+          // Save session
+          sessionUtils.saveSession({
+            name: walkerInfo.name,
+            email: "",
+            dateWalked: walkerInfo.dateWalked,
+            school: "",
+          })
+          
           setShowSurvey(true)
+          setIsLoggedIn(true)
           console.log("Survey started with submission ID:", result.submissionId)
         } else {
           alert(`Error creating survey session: ${result.error}`)
@@ -1087,13 +1079,13 @@ export default function SurveyApp() {
     return { completed, total }
   }
 
-  if (loading) {
+  if (loading || !sessionChecked) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center p-4">
         <Card className="w-full max-w-md shadow-lg">
           <CardContent className="p-6">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
               <p className="text-gray-600">Loading survey data...</p>
             </div>
           </CardContent>
@@ -1104,10 +1096,10 @@ export default function SurveyApp() {
 
   if (!showSurvey) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100 p-4">
         <div className="max-w-2xl mx-auto space-y-6">
           {/* Header with Logo */}
-          <Card className="shadow-lg border-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+          <Card className="shadow-lg border-0 bg-gradient-to-r from-orange-600 to-orange-700 text-white" style={{ background: 'linear-gradient(to right, #FF530D, #E64A0C)' }}>
             <CardHeader className="text-center">
               <div className="flex justify-end">
                 <div className="p-1 py-1 px-1.5 my-0 mx-0 rounded border-0 leading-5 bg-transparent">
@@ -1121,10 +1113,8 @@ export default function SurveyApp() {
                   />
                 </div>
               </div>
-              <CardTitle className="text-2xl font-bold">Educational Adequacy Survey</CardTitle>
-              <CardDescription className="text-blue-100">
-                Please provide your information before starting the survey
-              </CardDescription>
+              <CardTitle className="text-2xl font-bold">Facilities Assessment</CardTitle>
+
             </CardHeader>
           </Card>
 
@@ -1132,69 +1122,23 @@ export default function SurveyApp() {
           <Card className="shadow-lg border-0">
             <CardHeader>
               <CardTitle className="text-xl text-gray-800 flex items-center gap-2">
-                <User className="w-5 h-5 text-blue-600" />
+                <User className="w-5 h-5 text-orange-600" />
                 Walker Information
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name" className="text-gray-700 font-medium">
-                    Walker Name
-                  </Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input
-                      id="name"
-                      placeholder="Enter your full name"
-                      value={walkerInfo.name}
-                      onChange={(e) => handleWalkerInfoChange("name", e.target.value)}
-                      className="pl-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-gray-700 font-medium">
-                    Email Address
-                  </Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="Enter your email"
-                      value={walkerInfo.email}
-                      onChange={(e) => handleWalkerInfoChange("email", e.target.value)}
-                      className="pl-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="date" className="text-gray-700 font-medium">
-                    Date Walked
-                  </Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input
-                      id="date"
-                      type="date"
-                      value={walkerInfo.dateWalked}
-                      onChange={(e) => handleWalkerInfoChange("dateWalked", e.target.value)}
-                      className="pl-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="school" className="text-gray-700 font-medium">
-                    School
-                  </Label>
-                  <SchoolCombobox
-                    value={walkerInfo.school}
-                    onChange={(value) => handleWalkerInfoChange("school", value)}
-                    placeholder="Select or type school name"
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-gray-700 font-medium">
+                  Walker Name
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="name"
+                    placeholder="Enter your full name"
+                    value={walkerInfo.name}
+                    onChange={(e) => handleWalkerInfoChange("name", e.target.value)}
+                    className="pl-10 border-gray-300 focus:border-orange-500 focus:ring-orange-500"
                   />
                 </div>
               </div>
@@ -1203,25 +1147,15 @@ export default function SurveyApp() {
                 <Button
                   onClick={handleStartSurvey}
                   disabled={!canStartSurvey()}
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium py-3 text-lg shadow-lg"
+                  className="w-full bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white font-medium py-3 text-lg shadow-lg"
+                  style={{ background: 'linear-gradient(to right, #FF530D, #E64A0C)' }}
                 >
-                  Start Survey
+                                        Start Walk
                   <ChevronRight className="w-5 h-5 ml-2" />
                 </Button>
               </div>
 
-              {/* Link to Scoring Page */}
-              <div className="pt-4 border-t border-gray-200">
-                <div className="text-center">
-                  <p className="text-sm text-gray-600 mb-3">Already completed all surveys? View your scores:</p>
-                  <Link href="/scoring">
-                    <Button variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50 bg-transparent">
-                      <Calculator className="w-4 h-4 mr-2" />
-                      View Survey Scores
-                    </Button>
-                  </Link>
-                </div>
-              </div>
+
             </CardContent>
           </Card>
         </div>
@@ -1230,584 +1164,97 @@ export default function SurveyApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100 p-4">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Header with Walker Info and Logo */}
-        <Card className="shadow-lg border-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+        <Card className="shadow-lg border-0 bg-gradient-to-r from-orange-600 to-orange-700 text-white" style={{ background: 'linear-gradient(to right, #FF530D, #E64A0C)' }}>
           <CardContent className="text-center">
-            <div className="flex items-center flex-col gap-y-0">
-              <div className="rounded p-2 py-1 px-1 my-2.5 mx-0 bg-transparent">
-                <Image
-                  src="/PE_Wordmark_01_White_CMYK.png"
-                  alt="Perkins Eastman"
-                  width={120}
-                  height={30}
-                  unoptimized
-                  className="h-6 w-auto"
-                />
-              </div>
-              <div className="flex flex-col items-center justify-between w-full text-sm text-white gap-2 sm:flex-row">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center flex-col gap-y-0 flex-1">
+                <div className="rounded p-2 py-1 px-1 my-2.5 mx-0 bg-transparent">
+                  <Image
+                    src="/PE_Wordmark_01_White_CMYK.png"
+                    alt="Perkins Eastman"
+                    width={120}
+                    height={30}
+                    unoptimized
+                    className="h-6 w-auto"
+                  />
+                </div>
+                              <div className="flex flex-col items-center justify-between w-full text-sm text-white gap-2 sm:flex-row">
                 <div className="my-0">
-                  <span className="font-medium">{walkerInfo.name}</span> • {walkerInfo.school}
+                  <span className="font-medium">{walkerInfo.name}</span>
                 </div>
                 <div className="text-sm">{walkerInfo.dateWalked}</div>
               </div>
+              </div>
+              <Button
+                onClick={handleLogout}
+                variant="outline"
+                size="sm"
+                className="text-white border-white hover:bg-white hover:text-orange-600 bg-transparent font-medium"
+                style={{ backgroundColor: 'transparent' }}
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Survey Category Selector */}
+        {/* Photo Documentation Section */}
         <Card className="shadow-lg border-0">
           <CardHeader>
-            <div className="flex justify-between flex-col items-start gap-y-0.5">
-              <div>
-                <CardTitle className="text-gray-800">Survey Categories</CardTitle>
-              </div>
-              <div className="text-right my-1.5 py-0">
-                <div className="text-sm font-medium text-gray-800">
-                  Progress: {getCompletedSurveysCount()}/{ALL_REQUIRED_SURVEYS.length} Surveys
-                </div>
-                <div className="w-32 mt-1">
-                  <div className="bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${(getCompletedSurveysCount() / ALL_REQUIRED_SURVEYS.length) * 100}%` }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            </div>
+                          <CardTitle className="text-gray-800 flex items-center gap-2">
+                <Camera className="w-5 h-5 text-orange-600" />
+                Photo Documentation
+              </CardTitle>
+            <CardDescription>
+              Take photos and place them on the floorplan to document your walkthrough
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              {surveyCategories.map((surveyName) => {
-                const isCompleted = surveyProgress[surveyName] || false
-                return (
-                  <Button
-                    key={surveyName}
-                    variant={selectedSurvey === surveyName ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handleSurveyChange(surveyName)}
-                    className={`text-xs transition-all relative ${
-                      selectedSurvey === surveyName
-                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md"
-                        : isCompleted
-                          ? "border-green-300 text-green-700 hover:bg-green-50 bg-green-50"
-                          : "border-blue-200 text-blue-700 hover:bg-blue-50"
-                    }`}
-                  >
-                    {surveyName}
-                    {MULTI_ENTRY_SURVEYS.includes(surveyName) && <Building className="w-3 h-3 ml-1" />}
-                    {isCompleted && (
-                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                        <Check className="w-2 h-2 text-white" />
-                      </div>
-                    )}
-                  </Button>
-                )
-              })}
+          <CardContent className="space-y-6">
+            {/* Photo Upload Component */}
+            <PhotoUpload
+              submissionId={currentSubmissionId || undefined}
+              surveyCategory="Photo Documentation"
+              disabled={false}
+              onPhotoUploaded={(photoId) => {
+                console.log("Photo uploaded:", photoId)
+              }}
+            />
+
+            {/* Instructions */}
+            <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
+                <div className="text-sm text-orange-800">
+                  <p className="font-medium mb-2">How to use Photo Documentation:</p>
+                  <ul className="space-y-1 text-xs">
+                    <li>• Click "Take Photo" to use your device camera</li>
+                    <li>• Click "Choose from Gallery" to upload existing photos</li>
+                    <li>• Add an optional caption to describe what the photo shows</li>
+                    <li>• After uploading, you'll be prompted to place the photo on the floorplan</li>
+                    <li>• Select the floor (First or Second) and click where the photo was taken</li>
+                    <li>• Photos are automatically saved with their location coordinates</li>
+                  </ul>
+                </div>
+              </div>
             </div>
 
-            {/* View Scores Button - Show when at least 8 surveys completed */}
-            {areAllSurveysCompleted() && (
-              <div className="pt-4 border-t border-gray-200">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-green-800 mb-1">
-                        🎉{" "}
-                        {getCompletedSurveysCount() === ALL_REQUIRED_SURVEYS.length
-                          ? "All Surveys Completed!"
-                          : "Almost Done!"}
-                      </h3>
-                      <p className="text-sm text-green-700">
-                        You've completed {getCompletedSurveysCount()} out of {ALL_REQUIRED_SURVEYS.length} surveys.
-                        {getCompletedSurveysCount() >= 8
-                          ? " View your detailed scores now."
-                          : " Complete more surveys to unlock scoring."}
-                      </p>
-                    </div>
-                    <Link href="/scoring">
-                      <Button className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white">
-                        <Calculator className="w-4 h-4 mr-2" />
-                        View Scores
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Progress Details */}
-            <div className="pt-2">
-              <div className="text-xs text-gray-600">
-                <span className="font-medium">Completed:</span>{" "}
-                {ALL_REQUIRED_SURVEYS.filter((survey) => surveyProgress[survey]).join(", ") || "None"}
-              </div>
-              {getCompletedSurveysCount() < ALL_REQUIRED_SURVEYS.length && (
-                <div className="text-xs text-gray-500 mt-1">
-                  <span className="font-medium">Remaining:</span>{" "}
-                  {ALL_REQUIRED_SURVEYS.filter((survey) => !surveyProgress[survey]).join(", ")}
-                </div>
-              )}
+            {/* View Photo Gallery Button */}
+            <div className="text-center pt-4">
+              <Link href="/scoring">
+                <Button variant="outline" className="border-orange-300 text-orange-700 hover:bg-orange-50 bg-transparent">
+                  <Camera className="w-4 h-4 mr-2" />
+                  View Photo Gallery
+                </Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
 
-        {/* Multi-Entry Management for Classrooms */}
-        {isMultiEntryCategory && (
-          <Card className="shadow-lg border-0">
-            <CardHeader>
-              <CardTitle className="text-gray-800 flex items-center gap-2">
-                <Building className="w-5 h-5 text-blue-600" />
-                {selectedSurvey} Entries
-              </CardTitle>
-              <CardDescription>Manage multiple {selectedSurvey.toLowerCase()} assessments</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {currentEntries.map((entry) => (
-                  <div key={entry.id} className="flex items-center gap-2">
-                    <Button
-                      variant={currentEntryId === entry.id ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => selectClassroomEntry(entry.id)}
-                      className={`text-xs ${
-                        currentEntryId === entry.id
-                          ? "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
-                          : "border-gray-300"
-                      }`}
-                    >
-                      Room {entry.roomDetails.roomNumber || "New"}
-                      {entry.completed && <Check className="w-3 h-3 ml-1" />}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteClassroomEntry(entry.id)}
-                      className="text-red-600 border-red-300 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={createNewClassroomEntry}
-                  className="text-blue-600 border-blue-300 hover:bg-blue-50 bg-transparent"
-                >
-                  <Plus className="w-3 h-3 mr-1" />
-                  Add Room
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
-        {/* Room Details Form for Multi-Entry Categories */}
-        {isMultiEntryCategory && currentEntry && (
-          <Card className="shadow-lg border-0">
-            <CardHeader>
-              <CardTitle className="text-gray-800">Room Details</CardTitle>
-              <CardDescription>Provide details for this {selectedSurvey.toLowerCase().slice(0, -1)}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-gray-700 font-medium">Room Number</Label>
-                  <Input
-                    placeholder="e.g., 101"
-                    value={currentEntry.roomDetails.roomNumber}
-                    onChange={(e) => updateRoomDetails("roomNumber", e.target.value)}
-                    className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-gray-700 font-medium">Grade Served</Label>
-                  <Input
-                    placeholder="e.g., K-2, 3rd, 9-12"
-                    value={currentEntry.roomDetails.gradeServed}
-                    onChange={(e) => updateRoomDetails("gradeServed", e.target.value)}
-                    className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                {selectedSurvey === "Specialized Classrooms" && (
-                  <div className="space-y-2">
-                    <Label className="text-gray-700 font-medium">Room Type</Label>
-                    <Select
-                      value={currentEntry.roomDetails.roomType}
-                      onValueChange={(value: string) => updateRoomDetails("roomType", value)}
-                    >
-                      <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ROOM_TYPES.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label className="text-gray-700 font-medium">Portable?</Label>
-                  <Select
-                    value={currentEntry.roomDetails.isPortable}
-                    onValueChange={(value: "Y" | "N") => updateRoomDetails("isPortable", value)}
-                  >
-                    <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Y">Yes</SelectItem>
-                      <SelectItem value="N">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-gray-700 font-medium">Ceiling Height</Label>
-                  <Input
-                    placeholder="e.g., 9 ft"
-                    value={currentEntry.roomDetails.ceilingHeight}
-                    onChange={(e) => updateRoomDetails("ceilingHeight", e.target.value)}
-                    className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-gray-700 font-medium">Mode of Instruction</Label>
-                  <Select
-                    value={currentEntry.roomDetails.modeOfInstruction}
-                    onValueChange={(value: string) => updateRoomDetails("modeOfInstruction", value)}
-                  >
-                    <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                      <SelectValue placeholder="Select instruction mode" />
-                    </SelectTrigger>
-                    <SelectContent className="w-44">
-                      {INSTRUCTION_MODES.map((mode) => (
-                        <SelectItem key={mode} value={mode}>
-                          {mode}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              {!canCompleteRoomDetails() && (
-                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-yellow-800">
-                    Please complete all room details before proceeding with the assessment questions.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {selectedSurvey === "Specialized Classrooms" && currentEntry && currentEntry.roomDetails.roomType && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <span className="font-medium">Room Type Selected:</span> {currentEntry.roomDetails.roomType}
-              <br />
-              General specialized classroom questions will appear for all room types. Room-type-specific questions will
-              be filtered based on your selection.
-            </p>
-          </div>
-        )}
-
-        {/* Question Navigation */}
-        {selectedSurvey && (!isMultiEntryCategory || (currentEntry && canCompleteRoomDetails())) && (
-          <QuestionNavigation
-            surveyName={selectedSurvey}
-            filteredQuestions={filteredQuestions}
-            getAnswerChoices={getAnswerChoices}
-            getResponse={getResponse}
-            isMultiEntryCategory={isMultiEntryCategory}
-            currentEntry={currentEntry}
-          />
-        )}
-
-        {/* All Questions for Selected Survey */}
-        {selectedSurvey && (!isMultiEntryCategory || (currentEntry && canCompleteRoomDetails())) && (
-          <Card className="shadow-lg border-0">
-            <CardHeader>
-              <div className="flex items-center gap-2 mb-2">
-                <Badge className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white">{selectedSurvey}</Badge>
-                <Badge variant="outline" className="border-blue-200 text-blue-700">
-                  {filteredQuestions.length} Question Groups
-                </Badge>
-                {isMultiEntryCategory && currentEntry && (
-                  <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white">
-                    Room {currentEntry.roomDetails.roomNumber}
-                  </Badge>
-                )}
-              </div>
-              <CardTitle className="text-xl text-gray-800">{selectedSurvey} Assessment</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              {/* Photo Upload - One per survey category */}
-              <div className="border-b border-gray-200 pb-6">
-                <PhotoUpload
-                  submissionId={currentSubmissionId || undefined}
-                  surveyCategory={selectedSurvey}
-                  roomNumber={isMultiEntryCategory && currentEntry ? currentEntry.roomDetails.roomNumber : undefined}
-                  disabled={false}
-                  onPhotoUploaded={(photoId) => {
-                    console.log("Photo uploaded for survey:", selectedSurvey, photoId)
-                  }}
-                />
-              </div>
-
-              {filteredQuestions.map(([questionKey, questions], groupIndex) => {
-                // Section Description - show once per survey if applicable
-                const sectionDescription =
-                  groupIndex === 0 && questions.length > 0 ? getSectionDescription(selectedSurvey, questions[0]) : null
-
-                return (
-                  <div
-                    key={questionKey}
-                    id={generateQuestionId(questionKey)}
-                    className="border border-gray-200 rounded-lg p-6 bg-white shadow-sm scroll-mt-6"
-                  >
-                    {/* Section Description */}
-                    {sectionDescription && (
-                      <div className="mb-6">
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          <div className="flex items-start gap-3">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                            <div>
-                              <h4 className="font-semibold text-blue-900 mb-2">Section Information</h4>
-                              <p className="text-sm text-blue-800 leading-relaxed">{sectionDescription}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="mb-4">
-                      <h2 className="text-md font-medium text-black-700">{questionKey}</h2>
-                    </div>
-
-                    <div className="space-y-6">
-                      {questions
-                        .map((question, itemIndex) => {
-                          const answerChoices = getAnswerChoices(question)
-
-                          // Skip this question if it's filtered out
-                          if (answerChoices.length === 0) {
-                            return null
-                          }
-
-                          return (
-                            <div key={itemIndex} className="border-b border-gray-100 pb-6 last:border-b-0">
-                              <div className="mb-4">
-                                {question.Category && (
-                                  <div className="text-sm text-gray-600 mb-3">
-                                    <span className="font-medium">Category:</span> {question.Category}
-                                    {question.Subcategory && (
-                                      <span className="ml-2">
-                                        <span className="font-medium">Subcategory:</span> {question.Subcategory}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="space-y-4">
-                                {answerChoices.map((choice, choiceIndex) => {
-                                  const currentResponse = getResponse(questionKey, itemIndex, choice)
-
-                                  return (
-                                    <div key={choiceIndex} className="space-y-3">
-                                      <div className="font-medium text-sm bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-lg border-l-4 border-blue-500">
-                                        {choice}
-                                      </div>
-                                      <div className="grid grid-cols-2 gap-2">
-                                        {RESPONSE_OPTIONS.map((option) => {
-                                          const isSelected = currentResponse?.response === option
-
-                                          let buttonClass = "text-xs h-auto py-2 px-3 transition-all duration-200"
-                                          if (isSelected) {
-                                            if (option === "Yes")
-                                              buttonClass += " bg-green-600 hover:bg-green-700 text-white shadow-md"
-                                            else if (option === "No")
-                                              buttonClass += " bg-red-600 hover:bg-red-700 text-white shadow-md"
-                                            else if (option === "Does Not Apply")
-                                              buttonClass += " bg-yellow-600 hover:bg-yellow-700 text-white shadow-md"
-                                            else buttonClass += " bg-gray-600 hover:bg-gray-700 text-white shadow-md"
-                                          } else {
-                                            if (option === "Yes")
-                                              buttonClass += " border-green-300 text-green-700 hover:bg-green-50"
-                                            else if (option === "No")
-                                              buttonClass += " border-red-300 text-red-700 hover:bg-red-50"
-                                            else if (option === "Does Not Apply")
-                                              buttonClass += " border-yellow-300 text-yellow-700 hover:bg-yellow-50"
-                                            else buttonClass += " border-gray-300 text-gray-700 hover:bg-gray-50"
-                                          }
-
-                                          return (
-                                            <Button
-                                              key={option}
-                                              variant={isSelected ? "default" : "outline"}
-                                              size="sm"
-                                              onClick={() => handleResponse(questionKey, itemIndex, choice, option)}
-                                              className={buttonClass}
-                                            >
-                                              {isSelected && <Check className="w-3 h-3 mr-1" />}
-                                              {option}
-                                            </Button>
-                                          )
-                                        })}
-                                      </div>
-
-                                      {/* Elaboration box */}
-                                      {currentResponse &&
-                                        needsElaboration(currentResponse.response, questionKey, choice) && (
-                                          <div className="mt-3 space-y-2">
-                                            <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                                              <MessageSquare className="w-4 h-4" />
-                                              {currentResponse.response === "Yes" &&
-                                              questionKey === "The building is unclean throughout"
-                                                ? "Please describe the cleanliness issues:"
-                                                : "Please elaborate:"}
-                                            </Label>
-                                            <Textarea
-                                              placeholder={
-                                                currentResponse.response === "Yes" &&
-                                                questionKey === "The building is unclean throughout"
-                                                  ? "Describe specific areas or types of cleanliness issues observed..."
-                                                  : "Provide additional details or explanation..."
-                                              }
-                                              value={currentResponse.elaboration || ""}
-                                              onChange={(e) =>
-                                                handleElaboration(questionKey, itemIndex, choice, e.target.value)
-                                              }
-                                              className="min-h-[80px] border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                                            />
-                                          </div>
-                                        )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )
-                        })
-                        .filter(Boolean)}
-                    </div>
-                  </div>
-                )
-              })}
-
-              {/* Submit Button for Multi-Entry Categories */}
-              {isMultiEntryCategory && currentEntry && canCompleteRoomDetails() && (
-                <div className="pt-6 border-t border-gray-200 space-y-4">
-                  {/* Progress Note */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                      <div className="text-sm">
-                        <p className="font-medium text-blue-900 mb-1">
-                          Progress: {getAllItemsProgress().completed} of {getAllItemsProgress().total} items completed
-                        </p>
-                        <p className="text-blue-800">
-                          All items must be completed before you can submit this room assessment.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={handleSubmitEntry}
-                    disabled={!canProceed()}
-                    className={`w-full font-medium py-3 text-lg shadow-lg ${
-                      canProceed()
-                        ? "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
-                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    }`}
-                  >
-                    {canProceed() ? (
-                      <>
-                        Complete Room {currentEntry.roomDetails.roomNumber} Assessment
-                        <Check className="w-5 h-5 ml-2" />
-                      </>
-                    ) : (
-                      <>
-                        Complete All Items to Submit
-                        <div className="w-5 h-5 ml-2 border-2 border-gray-400 rounded-full"></div>
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {/* Final Submit Button */}
-              {!isMultiEntryCategory && (
-                <div className="pt-6 border-t border-gray-200 space-y-4">
-                  {/* Progress Note */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                      <div className="text-sm">
-                        <p className="font-medium text-blue-900 mb-1">
-                          Progress: {getAllItemsProgress().completed} of {getAllItemsProgress().total} items completed
-                        </p>
-                        <p className="text-blue-800">All items must be completed before you can submit this survey.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={getAllItemsProgress().completed !== getAllItemsProgress().total}
-                    className={`w-full font-medium py-3 text-lg shadow-lg ${
-                      getAllItemsProgress().completed === getAllItemsProgress().total
-                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
-                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    }`}
-                  >
-                    {getAllItemsProgress().completed === getAllItemsProgress().total ? (
-                      <>
-                        Save Survey Data
-                        <Check className="w-5 h-5 ml-2" />
-                      </>
-                    ) : (
-                      <>
-                        Complete All Items to Submit
-                        <div className="w-5 h-5 ml-2 border-2 border-gray-400 rounded-full"></div>
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Overall Progress for Multi-Entry Categories */}
-        {isMultiEntryCategory && currentEntries.length > 0 && (
-          <Card className="shadow-lg border-0">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">
-                    {selectedSurvey} Progress: {currentEntries.filter((entry) => entry.completed).length} of{" "}
-                    {currentEntries.length} rooms completed
-                  </p>
-                </div>
-                <Button
-                  onClick={handleSubmit}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
-                >
-                  Save All Data
-                  <Check className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   )

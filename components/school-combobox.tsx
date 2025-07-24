@@ -1,29 +1,25 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown, School } from "lucide-react"
+import { Check, ChevronsUpDown, Building } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-const SCHOOLS = [
-  "Abraham Lincoln Elementary",
-  "Benjamin Franklin Middle School",
-  "George Washington High School",
-  "Thomas Jefferson Elementary",
-  "Theodore Roosevelt Middle School",
-  "John F. Kennedy High School",
-  "Martin Luther King Jr. Elementary",
-  "Susan B. Anthony Middle School",
+const BUILDINGS = [
+  "Admin Building",
+  "Conference Center",
+  "Garage",
+  "Site",
 ]
 
-interface SchoolComboboxProps {
+interface BuildingComboboxProps {
   value: string
   onChange: (value: string) => void
   placeholder?: string
 }
 
-export function SchoolCombobox({ value, onChange, placeholder = "Select or type school name" }: SchoolComboboxProps) {
+export function SchoolCombobox({ value, onChange, placeholder = "Select or type building name" }: BuildingComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [inputFocused, setInputFocused] = React.useState(false)
 
@@ -54,11 +50,11 @@ export function SchoolCombobox({ value, onChange, placeholder = "Select or type 
     }, 200)
   }
 
-  const filteredSchools = SCHOOLS.filter((school) => school.toLowerCase().includes(value.toLowerCase()))
+  const filteredSchools = BUILDINGS.filter((school) => school.toLowerCase().includes(value.toLowerCase()))
 
   return (
     <div className="relative">
-      <School className="absolute left-3 top-3 h-4 w-4 text-gray-400 z-10" />
+      <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400 z-10" />
       <div className="relative">
         <Input
           type="text"
@@ -99,7 +95,7 @@ export function SchoolCombobox({ value, onChange, placeholder = "Select or type 
             </div>
           ) : (
             <div className="px-3 py-2 text-gray-500 text-sm">
-              {value ? `No schools found. Press Enter to use "${value}"` : "No schools found."}
+              {value ? `No buildings found. Press Enter to use "${value}"` : "No buildings found."}
             </div>
           )}
         </div>

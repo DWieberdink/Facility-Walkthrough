@@ -4,7 +4,7 @@ const supabase = getSupabase()
 
 type WalkerInfo = {
   name: string
-  email: string
+  email?: string
   school: string
 }
 
@@ -201,22 +201,62 @@ function findMatchingCSVRow(
 }
 
 export async function saveWalker(walkerInfo: WalkerInfo) {
-  const { data, error } = await supabase
-    .from("walkers")
-    .insert({
-      name: walkerInfo.name,
-      email: walkerInfo.email,
-      school: walkerInfo.school,
+  try {
+    console.log("Attempting to save walker:", walkerInfo)
+    
+    // First, let's test if the table exists
+    const { data: testData, error: testError } = await supabase
+      .from("walkers")
+      .select("id")
+      .limit(1)
+    
+    if (testError) {
+      console.error("Table test failed:", testError)
+      if (testError.message.includes("does not exist")) {
+        throw new Error("The 'walkers' table does not exist. Please run the database setup script in your Supabase dashboard.")
+      }
+      throw new Error(`Database connection error: ${testError.message}`)
+    }
+    
+    const { data, error } = await supabase
+      .from("walkers")
+      .insert({
+        name: walkerInfo.name,
+        email: walkerInfo.email || null,
+        school: walkerInfo.school,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error("Supabase error saving walker:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        fullError: error
+      })
+      throw new Error(`Database error: ${error.message} (Code: ${error.code || 'unknown'})`)
+    }
+
+    if (!data) {
+      throw new Error("No data returned from walker insert")
+    }
+
+    console.log("Successfully saved walker:", data)
+    return data
+  } catch (error) {
+    console.error("Error in saveWalker function:", {
+      error,
+      type: typeof error,
+      message: error instanceof Error ? error.message : String(error)
     })
-    .select()
-    .single()
-
-  if (error) {
-    console.error("Error saving walker:", error)
-    throw error
+    if (error instanceof Error) {
+      throw error
+    } else {
+      throw new Error(`Unknown error saving walker: ${String(error)}`)
+    }
   }
-
-  return data
 }
 
 export async function createSurveySubmission(walkerId: string, dateWalked: string) {
@@ -387,22 +427,28 @@ export async function saveAllSurveyData(
     // 1. Save walker information (or get existing)
     let walker
     try {
-      // Try to find existing walker first
-      const { data: existingWalker, error: findError } = await supabase
-        .from("walkers")
-        .select("*")
-        .eq("email", walkerInfo.email)
-        .single()
+      // If email is provided, try to find existing walker first
+      if (walkerInfo.email && walkerInfo.email.trim()) {
+        const { data: existingWalker, error: findError } = await supabase
+          .from("walkers")
+          .select("*")
+          .eq("email", walkerInfo.email)
+          .single()
 
-      if (existingWalker) {
-        walker = existingWalker
-        console.log("Using existing walker:", walker.id)
+        if (existingWalker) {
+          walker = existingWalker
+          console.log("Using existing walker:", walker.id)
+        } else {
+          walker = await saveWalker(walkerInfo)
+          console.log("Created new walker:", walker.id)
+        }
       } else {
+        // No email provided, always create new walker
         walker = await saveWalker(walkerInfo)
         console.log("Created new walker:", walker.id)
       }
     } catch (error) {
-      // If walker doesn't exist, create new one
+      // If any error occurs, create new walker
       walker = await saveWalker(walkerInfo)
       console.log("Created new walker:", walker.id)
     }

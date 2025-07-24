@@ -5,59 +5,136 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  Calculator,
-  Download,
+  Camera,
   Search,
-  ChevronDown,
-  ChevronRight,
   User,
   Building,
   Calendar,
-  FileText,
-  BarChart3,
   ChevronLeft,
+  MapPin,
+  Image as ImageIcon,
+  Download,
+  Filter,
+  ChevronDown,
+  ChevronRight,
+  Settings,
 } from "lucide-react"
-import { getAllSubmissions, calculateSubmissionScores, type OverallScore } from "../../lib/scoring"
+import { getSubmissionPhotos, getPhotoUrl } from "../../lib/storage"
+import { getSupabase } from "../../lib/supabase"
+import { FloorplanGallery } from "../../components/floorplan-gallery"
 import Image from "next/image"
 import Link from "next/link"
 
-interface SubmissionWithScore {
+const supabase = getSupabase()
+
+interface PhotoRecord {
+  id: string
+  submission_id: string
+  survey_category: string
+  question_key: string | null
+  room_number: string | null
+  file_name: string
+  file_path: string
+  file_size: number | null
+  mime_type: string | null
+  caption: string | null
+  uploaded_at: string
+  location_x?: number | null
+  location_y?: number | null
+  floor_level?: string | null
+}
+
+interface SubmissionWithPhotos {
   id: string
   created_at: string
   walkers: {
     name: string
-    email: string
+    email: string | null
     school: string
   }
-  scores?: OverallScore
-  isCalculating?: boolean
+  photos: PhotoRecord[]
 }
 
-export default function ScoringPage() {
-  const [submissions, setSubmissions] = useState<SubmissionWithScore[]>([])
-  const [filteredSubmissions, setFilteredSubmissions] = useState<SubmissionWithScore[]>([])
+interface GroupedPhotos {
+  [building: string]: {
+    [floor: string]: {
+      photos: PhotoRecord[]
+      submissions: SubmissionWithPhotos[]
+    }
+  }
+}
+
+export default function PhotoGalleryPage() {
+  const [submissions, setSubmissions] = useState<SubmissionWithPhotos[]>([])
+  const [groupedPhotos, setGroupedPhotos] = useState<GroupedPhotos>({})
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedSchool, setSelectedSchool] = useState<string>("all")
-  const [expandedSubmissions, setExpandedSubmissions] = useState<Set<string>>(new Set())
-  const [calculatedScores, setCalculatedScores] = useState<Record<string, OverallScore>>({})
+  const [selectedFloor, setSelectedFloor] = useState<string>("all")
+  const [expandedBuildings, setExpandedBuildings] = useState<Set<string>>(new Set())
+  const [expandedFloors, setExpandedFloors] = useState<Set<string>>(new Set())
+  const [showFloorplanView, setShowFloorplanView] = useState(false)
+  const [selectedBuildingForFloorplan, setSelectedBuildingForFloorplan] = useState<string>("")
+  const [selectedFloorForFloorplan, setSelectedFloorForFloorplan] = useState<string>("")
 
   useEffect(() => {
     loadSubmissions()
   }, [])
 
   useEffect(() => {
-    filterSubmissions()
-  }, [submissions, searchTerm, selectedSchool])
+    groupPhotosByBuildingAndFloor()
+  }, [submissions, searchTerm, selectedSchool, selectedFloor])
 
   const loadSubmissions = async () => {
     try {
       setLoading(true)
-      const data = await getAllSubmissions()
-      setSubmissions(data)
+      
+      // Fetch all survey submissions with walker information
+      const { data: submissionsData, error: submissionsError } = await supabase
+        .from("survey_submissions")
+        .select(`
+          id,
+          created_at,
+          walkers (
+            name,
+            email,
+            school
+          )
+        `)
+        .order("created_at", { ascending: false })
+
+      if (submissionsError) {
+        console.error("Error fetching submissions:", submissionsError)
+        return
+      }
+
+      // Fetch photos for each submission
+      const submissionsWithPhotos: SubmissionWithPhotos[] = []
+      
+      for (const submission of submissionsData || []) {
+        try {
+          const photos = await getSubmissionPhotos(submission.id)
+          submissionsWithPhotos.push({
+            id: submission.id,
+            created_at: submission.created_at,
+            walkers: submission.walkers,
+            photos: photos
+          })
+        } catch (photoError) {
+          console.error(`Error fetching photos for submission ${submission.id}:`, photoError)
+          // Add submission without photos
+          submissionsWithPhotos.push({
+            id: submission.id,
+            created_at: submission.created_at,
+            walkers: submission.walkers,
+            photos: []
+          })
+        }
+      }
+
+      setSubmissions(submissionsWithPhotos)
     } catch (error) {
       console.error("Error loading submissions:", error)
     } finally {
@@ -65,7 +142,7 @@ export default function ScoringPage() {
     }
   }
 
-  const filterSubmissions = () => {
+  const groupPhotosByBuildingAndFloor = () => {
     let filtered = submissions
 
     // Filter by search term (name, email, or school)
@@ -83,287 +160,198 @@ export default function ScoringPage() {
       filtered = filtered.filter((submission) => submission.walkers?.school === selectedSchool)
     }
 
-    setFilteredSubmissions(filtered)
-  }
-
-  const calculateScores = async (submissionId: string) => {
-    try {
-      // Mark as calculating
-      setSubmissions((prev) => prev.map((sub) => (sub.id === submissionId ? { ...sub, isCalculating: true } : sub)))
-
-      const scores = await calculateSubmissionScores(submissionId)
-
-      // Store calculated scores
-      setCalculatedScores((prev) => ({
-        ...prev,
-        [submissionId]: scores,
-      }))
-
-      // Update submission with scores
-      setSubmissions((prev) =>
-        prev.map((sub) => (sub.id === submissionId ? { ...sub, scores, isCalculating: false } : sub)),
-      )
-    } catch (error) {
-      console.error("Error calculating scores:", error)
-      // Remove calculating state on error
-      setSubmissions((prev) => prev.map((sub) => (sub.id === submissionId ? { ...sub, isCalculating: false } : sub)))
-    }
-  }
-
-  const toggleExpanded = (submissionId: string) => {
-    const newExpanded = new Set(expandedSubmissions)
-    if (newExpanded.has(submissionId)) {
-      newExpanded.delete(submissionId)
-    } else {
-      newExpanded.add(submissionId)
-      // Calculate scores when expanding if not already calculated
-      if (!calculatedScores[submissionId]) {
-        calculateScores(submissionId)
+    // Group by building and floor
+    const grouped: GroupedPhotos = {}
+    
+    filtered.forEach(submission => {
+      const building = submission.walkers?.school || "Unknown Building"
+      
+      if (!grouped[building]) {
+        grouped[building] = {}
       }
-    }
-    setExpandedSubmissions(newExpanded)
+
+      // Group photos by floor
+      const photosByFloor: { [floor: string]: PhotoRecord[] } = {}
+      
+      submission.photos.forEach(photo => {
+        const floor = photo.floor_level || "Unknown Floor"
+        
+        if (!photosByFloor[floor]) {
+          photosByFloor[floor] = []
+        }
+        photosByFloor[floor].push(photo)
+      })
+
+      // Add to grouped structure
+      Object.keys(photosByFloor).forEach(floor => {
+        if (!grouped[building][floor]) {
+          grouped[building][floor] = {
+            photos: [],
+            submissions: []
+          }
+        }
+        
+        grouped[building][floor].photos.push(...photosByFloor[floor])
+        grouped[building][floor].submissions.push(submission)
+      })
+    })
+
+    setGroupedPhotos(grouped)
   }
 
-  const exportScores = (submission: SubmissionWithScore, scores: OverallScore) => {
-    const csvData = [
-      ["Survey Category", "Category", "Subcategory", "Score", "Max Score", "Percentage"],
-      ...scores.surveyScores.flatMap((survey) =>
-        survey.categories.map((category) => [
-          survey.surveyCategory,
-          category.category,
-          category.subcategory,
-          category.totalScore.toFixed(2),
-          category.maxPossibleScore.toFixed(2),
-          category.percentage.toFixed(1) + "%",
-        ]),
-      ),
-      [],
-      [
-        "Overall Score",
-        "",
-        "",
-        scores.totalScore.toFixed(2),
-        scores.maxPossibleScore.toFixed(2),
-        scores.percentage.toFixed(1) + "%",
-      ],
-    ]
-
-    const csvContent = csvData.map((row) => row.join(",")).join("\n")
-    const blob = new Blob([csvContent], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `scores-${submission.walkers?.name?.replace(/\s+/g, "-")}-${submission.walkers?.school?.replace(/\s+/g, "-")}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+  const toggleBuildingExpanded = (building: string) => {
+    const newExpanded = new Set(expandedBuildings)
+    if (newExpanded.has(building)) {
+      newExpanded.delete(building)
+    } else {
+      newExpanded.add(building)
+    }
+    setExpandedBuildings(newExpanded)
   }
 
-  const exportAllScores = () => {
-    const submissionsWithScores = filteredSubmissions.filter((sub) => sub.scores)
-
-    if (submissionsWithScores.length === 0) {
-      alert("No calculated scores to export. Please calculate scores first.")
-      return
+  const toggleFloorExpanded = (building: string, floor: string) => {
+    const key = `${building}-${floor}`
+    const newExpanded = new Set(expandedFloors)
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key)
+    } else {
+      newExpanded.add(key)
     }
-
-    const csvData = [
-      [
-        "Walker Name",
-        "Email",
-        "School",
-        "Date",
-        "Survey Category",
-        "Category",
-        "Subcategory",
-        "Score",
-        "Max Score",
-        "Percentage",
-      ],
-      ...submissionsWithScores.flatMap((submission) =>
-        submission.scores!.surveyScores.flatMap((survey) =>
-          survey.categories.map((category) => [
-            submission.walkers?.name || "",
-            submission.walkers?.email || "",
-            submission.walkers?.school || "",
-            new Date(submission.created_at).toLocaleDateString(),
-            survey.surveyCategory,
-            category.category,
-            category.subcategory,
-            category.totalScore.toFixed(2),
-            category.maxPossibleScore.toFixed(2),
-            category.percentage.toFixed(1) + "%",
-          ]),
-        ),
-      ),
-    ]
-
-    const csvContent = csvData.map((row) => row.join(",")).join("\n")
-    const blob = new Blob([csvContent], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `all-survey-scores-${new Date().toISOString().split("T")[0]}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    setExpandedFloors(newExpanded)
   }
 
   const getUniqueSchools = () => {
     const schools = submissions
       .map((sub) => sub.walkers?.school)
-      .filter(Boolean)
-      .filter((school, index, arr) => arr.indexOf(school) === index)
-    return schools.sort()
+      .filter(Boolean) as string[]
+    return [...new Set(schools)]
   }
 
-  const getScoreColor = (percentage: number) => {
-    if (percentage >= 80) return "text-green-600"
-    if (percentage >= 60) return "text-yellow-600"
-    return "text-red-600"
+  const getUniqueFloors = () => {
+    const floors = submissions
+      .flatMap((sub) => sub.photos.map((photo) => photo.floor_level))
+      .filter(Boolean) as string[]
+    return [...new Set(floors)]
   }
 
-  const getScoreBadgeColor = (percentage: number) => {
-    if (percentage >= 80) return "bg-green-100 text-green-800"
-    if (percentage >= 60) return "bg-yellow-100 text-yellow-800"
-    return "bg-red-100 text-red-800"
+  const getTotalPhotos = () => {
+    return submissions.reduce((total, sub) => total + sub.photos.length, 0)
+  }
+
+  const getTotalBuildings = () => {
+    return Object.keys(groupedPhotos).length
+  }
+
+  const getTotalFloors = () => {
+    return Object.values(groupedPhotos).reduce((total, building) => {
+      return total + Object.keys(building).length
+    }, 0)
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-lg">
-          <CardContent className="p-6">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading submissions...</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading photo gallery...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <Card className="shadow-lg border-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-          <CardHeader className="text-center relative">
-            {/* Back to Survey Button - Top Left */}
-            <div className="absolute top-4 left-4">
-              <Link href="/">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/30"
-                >
-                  <ChevronLeft className="w-4 h-4 mr-1" />
-                  Back to Survey
-                </Button>
-              </Link>
-            </div>
+    <div className="container mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Photo Gallery</h1>
+          <p className="text-gray-600 mt-2">
+            View and manage all uploaded photos organized by Building &gt; Floor
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/admin/floorplans">
+            <Button variant="outline" className="flex items-center gap-2 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100">
+              <Settings className="w-4 h-4" />
+              Manage Floor Plans
+            </Button>
+          </Link>
+          <Link href="/">
+            <Button variant="outline" className="flex items-center gap-2">
+              <ChevronLeft className="w-4 h-4" />
+              Back to Survey
+            </Button>
+          </Link>
+        </div>
+      </div>
 
-            <div className="flex justify-end">
-              <div className="p-1 py-1 px-1.5 my-0 mx-0 rounded border-0 leading-5 bg-transparent">
-                <Image
-                  src="/PE_Wordmark_01_White_CMYK.png"
-                  alt="Perkins Eastman"
-                  width={120}
-                  height={30}
-                  unoptimized
-                  className="h-6 w-auto"
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <User className="w-8 h-8 text-blue-600" />
+              <div>
+                <p className="text-2xl font-bold">{submissions.length}</p>
+                <p className="text-sm text-gray-600">Walkers</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <Camera className="w-8 h-8 text-green-600" />
+              <div>
+                <p className="text-2xl font-bold">{getTotalPhotos()}</p>
+                <p className="text-sm text-gray-600">Total Photos</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <Building className="w-8 h-8 text-purple-600" />
+              <div>
+                <p className="text-2xl font-bold">{getTotalBuildings()}</p>
+                <p className="text-sm text-gray-600">Buildings</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <MapPin className="w-8 h-8 text-orange-600" />
+              <div>
+                <p className="text-2xl font-bold">{getTotalFloors()}</p>
+                <p className="text-sm text-gray-600">Floors</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <Card className="mb-8">
+        <CardContent className="p-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="Search by name, email, or school..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
                 />
               </div>
             </div>
-            <CardTitle className="text-2xl font-bold flex items-center justify-center gap-2">
-              <BarChart3 className="w-6 h-6" />
-              Survey Scores Dashboard
-            </CardTitle>
-            <CardDescription className="text-blue-100">
-              View and analyze educational adequacy survey results from all walkers
-            </CardDescription>
-          </CardHeader>
-        </Card>
-
-        {/* Summary Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600" />
-                <div>
-                  <p className="text-sm text-gray-600">Total Submissions</p>
-                  <p className="text-2xl font-bold">{submissions.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Calculator className="w-5 h-5 text-green-600" />
-                <div>
-                  <p className="text-sm text-gray-600">Calculated Scores</p>
-                  <p className="text-2xl font-bold">{Object.keys(calculatedScores).length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Building className="w-5 h-5 text-purple-600" />
-                <div>
-                  <p className="text-sm text-gray-600">Schools</p>
-                  <p className="text-2xl font-bold">{getUniqueSchools().length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-orange-600" />
-                <div>
-                  <p className="text-sm text-gray-600">Avg Score</p>
-                  <p className="text-2xl font-bold">
-                    {Object.values(calculatedScores).length > 0
-                      ? (
-                          Object.values(calculatedScores).reduce((sum, score) => sum + score.percentage, 0) /
-                          Object.values(calculatedScores).length
-                        ).toFixed(1) + "%"
-                      : "N/A"}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Filters and Controls */}
-        <Card className="shadow-lg border-0">
-          <CardHeader>
-            <CardTitle className="text-gray-800">Filters & Controls</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search by name, email, or school..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-
+            <div className="flex gap-4">
               <Select value={selectedSchool} onValueChange={setSelectedSchool}>
-                <SelectTrigger className="w-full md:w-64">
-                  <SelectValue placeholder="Filter by school" />
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Select School" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Schools</SelectItem>
@@ -374,168 +362,209 @@ export default function ScoringPage() {
                   ))}
                 </SelectContent>
               </Select>
-
-              <Button onClick={exportAllScores} className="bg-green-600 hover:bg-green-700">
-                <Download className="w-4 h-4 mr-2" />
-                Export All
-              </Button>
+              <Select value={selectedFloor} onValueChange={setSelectedFloor}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Select Floor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Floors</SelectItem>
+                  {getUniqueFloors().map((floor) => (
+                    <SelectItem key={floor} value={floor}>
+                      {floor === "first" ? "First Floor" : floor === "second" ? "Second Floor" : floor}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Submissions List */}
-        <Card className="shadow-lg border-0">
-          <CardHeader>
-            <CardTitle className="text-gray-800">Survey Submissions</CardTitle>
-            <CardDescription>Click on a submission to calculate and view detailed scores</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {filteredSubmissions.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500">No submissions found matching your criteria.</p>
-              </div>
-            ) : (
-              filteredSubmissions.map((submission) => {
-                const isExpanded = expandedSubmissions.has(submission.id)
-                const scores = calculatedScores[submission.id]
+      {/* Photo Gallery - Grouped by Building > Floor */}
+      <Card className="shadow-lg border-0">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-gray-800">Photo Gallery</CardTitle>
+              <CardDescription>Photos organized by Building &gt; Floor</CardDescription>
+            </div>
+            <Button
+              onClick={() => {
+                setSelectedBuildingForFloorplan("")
+                setSelectedFloorForFloorplan("")
+                setShowFloorplanView(true)
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <MapPin className="w-4 h-4 mr-2" />
+              Floor Plan View
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {Object.keys(groupedPhotos).length === 0 ? (
+            <div className="text-center py-8">
+              <Camera className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 mb-2">No photos found matching your criteria.</p>
+              <p className="text-sm text-gray-400">Upload some photos from the main survey page to see them here.</p>
+            </div>
+          ) : (
+            Object.entries(groupedPhotos).map(([building, floors]) => {
+              const isBuildingExpanded = expandedBuildings.has(building)
+              const totalPhotosInBuilding = Object.values(floors).reduce((total, floor) => total + floor.photos.length, 0)
 
-                return (
-                  <div key={submission.id} className="border border-gray-200 rounded-lg">
-                    <div
-                      className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                      onClick={() => toggleExpanded(submission.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            {isExpanded ? (
-                              <ChevronDown className="w-4 h-4 text-gray-400" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4 text-gray-400" />
-                            )}
-                            <User className="w-5 h-5 text-blue-600" />
-                          </div>
-
-                          <div>
-                            <h3 className="font-semibold text-gray-900">
-                              {submission.walkers?.name || "Unknown Walker"}
-                            </h3>
-                            <p className="text-sm text-gray-600">
-                              {submission.walkers?.email} • {submission.walkers?.school}
-                            </p>
-                            <p className="text-xs text-gray-500 flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {new Date(submission.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {submission.isCalculating && (
-                            <div className="flex items-center gap-2">
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                              <span className="text-sm text-gray-600">Calculating...</span>
-                            </div>
-                          )}
-
-                          {scores && (
-                            <Badge className={getScoreBadgeColor(scores.percentage)}>
-                              {scores.percentage.toFixed(1)}% Overall
-                            </Badge>
-                          )}
+              return (
+                <div key={building} className="border border-gray-200 rounded-lg">
+                  {/* Building Header */}
+                  <div
+                    className="p-4 cursor-pointer hover:bg-gray-50 transition-colors bg-gray-50"
+                    onClick={() => toggleBuildingExpanded(building)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Building className="w-5 h-5 text-purple-600" />
+                        <div>
+                          <h3 className="font-semibold text-gray-900 text-lg">{building}</h3>
+                          <p className="text-sm text-gray-600">
+                            {Object.keys(floors).length} floors • {totalPhotosInBuilding} photos
+                          </p>
                         </div>
                       </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="border-t border-gray-200 p-4 bg-gray-50">
-                        {submission.isCalculating ? (
-                          <div className="text-center py-4">
-                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                            <p className="text-sm text-gray-600">Calculating scores...</p>
-                          </div>
-                        ) : scores ? (
-                          <div className="space-y-4">
-                            {/* Overall Score */}
-                            <div className="bg-white p-4 rounded-lg border">
-                              <div className="flex items-center justify-between mb-2">
-                                <h4 className="font-semibold text-gray-900">Overall Score</h4>
-                                <Button onClick={() => exportScores(submission, scores)} size="sm" variant="outline">
-                                  <Download className="w-3 h-3 mr-1" />
-                                  Export
-                                </Button>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <div className="flex-1">
-                                  <Progress value={scores.percentage} className="h-3" />
-                                </div>
-                                <div className="text-right">
-                                  <p className={`text-lg font-bold ${getScoreColor(scores.percentage)}`}>
-                                    {scores.percentage.toFixed(1)}%
-                                  </p>
-                                  <p className="text-xs text-gray-500">
-                                    {scores.totalScore.toFixed(1)} / {scores.maxPossibleScore.toFixed(1)}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Survey Category Scores */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {scores.surveyScores.map((survey) => (
-                                <div key={survey.surveyCategory} className="bg-white p-4 rounded-lg border">
-                                  <h5 className="font-medium text-gray-900 mb-3">{survey.surveyCategory}</h5>
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-sm text-gray-600">Overall</span>
-                                      <span className={`text-sm font-medium ${getScoreColor(survey.percentage)}`}>
-                                        {survey.percentage.toFixed(1)}%
-                                      </span>
-                                    </div>
-                                    <Progress value={survey.percentage} className="h-2" />
-
-                                    {/* Category breakdown */}
-                                    <div className="mt-3 space-y-1">
-                                      {survey.categories.slice(0, 3).map((category) => (
-                                        <div
-                                          key={`${category.category}-${category.subcategory}`}
-                                          className="flex justify-between text-xs"
-                                        >
-                                          <span className="text-gray-500 truncate">{category.subcategory}</span>
-                                          <span className={getScoreColor(category.percentage)}>
-                                            {category.percentage.toFixed(1)}%
-                                          </span>
-                                        </div>
-                                      ))}
-                                      {survey.categories.length > 3 && (
-                                        <div className="text-xs text-gray-400">
-                                          +{survey.categories.length - 3} more categories
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="border-purple-200 text-purple-700">
+                          {totalPhotosInBuilding} Photos
+                        </Badge>
+                        {isBuildingExpanded ? (
+                          <ChevronDown className="w-5 h-5 text-gray-500" />
                         ) : (
-                          <div className="text-center py-4">
-                            <p className="text-sm text-gray-600 mb-2">Scores not calculated yet</p>
-                            <Button onClick={() => calculateScores(submission.id)} size="sm">
-                              <Calculator className="w-3 h-3 mr-1" />
-                              Calculate Scores
-                            </Button>
-                          </div>
+                          <ChevronRight className="w-5 h-5 text-gray-500" />
                         )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                )
-              })
-            )}
-          </CardContent>
-        </Card>
-      </div>
+
+                  {/* Floors */}
+                  {isBuildingExpanded && (
+                    <div className="border-t border-gray-200">
+                      {Object.entries(floors).map(([floor, floorData]) => {
+                        const isFloorExpanded = expandedFloors.has(`${building}-${floor}`)
+                        const uniqueSubmissions = floorData.submissions.filter((sub, index, arr) => 
+                          arr.findIndex(s => s.id === sub.id) === index
+                        )
+
+                        return (
+                          <div key={floor} className="border-b border-gray-100 last:border-b-0">
+                            {/* Floor Header */}
+                            <div
+                              className="p-3 cursor-pointer hover:bg-gray-25 transition-colors"
+                              onClick={() => toggleFloorExpanded(building, floor)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <MapPin className="w-4 h-4 text-orange-600" />
+                                  <div>
+                                    <h4 className="font-medium text-gray-800">
+                                      {floor === "first" ? "First Floor" : 
+                                       floor === "second" ? "Second Floor" : 
+                                       floor}
+                                    </h4>
+                                    <p className="text-xs text-gray-600">
+                                      {uniqueSubmissions.length} walkers • {floorData.photos.length} photos
+                                    </p>
+                                  </div>
+                                </div>
+                                                                 <div className="flex items-center gap-2">
+                                   <Button
+                                     size="sm"
+                                     variant="outline"
+                                     className="h-6 px-2 text-xs border-orange-200 text-orange-700 hover:bg-orange-50"
+                                     onClick={(e) => {
+                                       e.stopPropagation()
+                                       setSelectedBuildingForFloorplan(building)
+                                       setSelectedFloorForFloorplan(floor)
+                                       setShowFloorplanView(true)
+                                     }}
+                                   >
+                                     <MapPin className="w-3 h-3 mr-1" />
+                                     Map
+                                   </Button>
+                                   <Badge variant="outline" className="border-orange-200 text-orange-700 text-xs">
+                                     {floorData.photos.length}
+                                   </Badge>
+                                   {isFloorExpanded ? (
+                                     <ChevronDown className="w-4 h-4 text-gray-500" />
+                                   ) : (
+                                     <ChevronRight className="w-4 h-4 text-gray-500" />
+                                   )}
+                                 </div>
+                              </div>
+                            </div>
+
+                            {/* Photos Grid */}
+                            {isFloorExpanded && (
+                              <div className="p-4 bg-gray-25">
+                                {floorData.photos.length === 0 ? (
+                                  <div className="text-center py-4">
+                                    <Camera className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                                    <p className="text-sm text-gray-600">No photos on this floor</p>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                                    {floorData.photos.map((photo) => (
+                                      <div key={photo.id} className="group relative">
+                                        <div className="aspect-square relative bg-gray-100 rounded-lg overflow-hidden border">
+                                          <Image
+                                            src={`/api/photos/${photo.id}`}
+                                            alt={photo.caption || "Uploaded photo"}
+                                            fill
+                                            className="object-cover group-hover:scale-105 transition-transform duration-200"
+                                          />
+                                          {/* Photo Info Overlay */}
+                                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-end">
+                                            <div className="p-2 w-full text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                              <p className="text-xs truncate">
+                                                {photo.caption || "No caption"}
+                                              </p>
+                                              <p className="text-xs opacity-75">
+                                                {photo.survey_category}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {/* Walker Info */}
+                                        <div className="mt-1">
+                                          <p className="text-xs text-gray-600 truncate">
+                                            {floorData.submissions.find(s => 
+                                              s.photos.some(p => p.id === photo.id)
+                                            )?.walkers?.name || "Unknown"}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Floor Plan Gallery Modal */}
+      <FloorplanGallery
+        isOpen={showFloorplanView}
+        onClose={() => setShowFloorplanView(false)}
+        submissions={submissions}
+        selectedBuilding={selectedBuildingForFloorplan}
+        selectedFloor={selectedFloorForFloorplan}
+      />
     </div>
   )
 }

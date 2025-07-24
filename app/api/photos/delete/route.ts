@@ -1,33 +1,54 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseServer } from "@/lib/supabase-server"
 
-const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_SURVEY_BUCKET || "survey-photos"
-
-export async function DELETE(req: NextRequest) {
+export async function DELETE(request: NextRequest) {
   try {
-    const photoId = req.nextUrl.searchParams.get("id")
-    if (!photoId) return NextResponse.json({ error: "Missing id" }, { status: 400 })
+    const { photoId } = await request.json()
+    
+    if (!photoId) {
+      return NextResponse.json({ error: "Photo ID is required" }, { status: 400 })
+    }
 
     const supabase = getSupabaseServer()
 
-    /* 1. Look up the DB row (needed to know the storage path) */
-    const { data: row, error: fetchErr } = await supabase.from("survey_photos").select("*").eq("id", photoId).single()
+    // First, get the photo details to find the file path
+    const { data: photo, error: fetchError } = await supabase
+      .from("survey_photos")
+      .select("file_path")
+      .eq("id", photoId)
+      .single()
 
-    if (fetchErr) throw fetchErr
-    if (!row) throw new Error("Photo not found")
+    if (fetchError) {
+      console.error("Error fetching photo:", fetchError)
+      return NextResponse.json({ error: "Photo not found" }, { status: 404 })
+    }
 
-    /* 2. Remove object from Storage */
-    const relativePath = row.file_path.replace(`${BUCKET}/`, "")
-    const { error: storageErr } = await supabase.storage.from(BUCKET).remove([relativePath])
-    if (storageErr) throw storageErr
+    // Delete the file from storage
+    if (photo.file_path) {
+      const { error: storageError } = await supabase.storage
+        .from("survey-photos")
+        .remove([photo.file_path])
 
-    /* 3. Delete DB record */
-    const { error: dbErr } = await supabase.from("survey_photos").delete().eq("id", photoId)
-    if (dbErr) throw dbErr
+      if (storageError) {
+        console.error("Error deleting file from storage:", storageError)
+        // Continue with database deletion even if storage deletion fails
+      }
+    }
 
-    return NextResponse.json({ success: true })
-  } catch (err: any) {
-    console.error("Photo delete route error:", err)
-    return NextResponse.json({ error: err.message ?? "Server error" }, { status: 500 })
+    // Delete the photo record from the database
+    const { error: deleteError } = await supabase
+      .from("survey_photos")
+      .delete()
+      .eq("id", photoId)
+
+    if (deleteError) {
+      console.error("Error deleting photo from database:", deleteError)
+      return NextResponse.json({ error: "Failed to delete photo" }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, message: "Photo deleted successfully" })
+  } catch (error) {
+    console.error("Error deleting photo:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

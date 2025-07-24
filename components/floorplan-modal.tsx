@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { X, MapPin, Check, Building } from "lucide-react"
+import { getFloorPlanUrlForBuilding, getAvailableBuildings, getAvailableFloors } from "../lib/floorplan-utils"
 
 interface FloorplanModalProps {
   isOpen: boolean
@@ -20,19 +21,94 @@ interface LocationPin {
 }
 
 export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }: FloorplanModalProps) {
+  const [selectedBuilding, setSelectedBuilding] = useState<string | null>(null)
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null)
   const [selectedLocation, setSelectedLocation] = useState<LocationPin | null>(null)
+  const [floorplanUrl, setFloorplanUrl] = useState<string | null>(null)
+  const [availableBuildings, setAvailableBuildings] = useState<string[]>([])
+  const [availableFloors, setAvailableFloors] = useState<string[]>([])
+  const [loadingBuildings, setLoadingBuildings] = useState(false)
+  const [loadingFloors, setLoadingFloors] = useState(false)
   const imageRef = useRef<HTMLImageElement>(null)
 
-  // Reset state whenever the modal opens
+  // Load available buildings when modal opens
   useEffect(() => {
     if (isOpen) {
+      setSelectedBuilding(null)
       setSelectedFloor(null)
       setSelectedLocation(null)
+      setFloorplanUrl(null)
+      
+      // Load available buildings from database
+      const loadBuildings = async () => {
+        setLoadingBuildings(true)
+        try {
+          const buildings = await getAvailableBuildings()
+          setAvailableBuildings(buildings)
+        } catch (error) {
+          console.error("Error loading buildings:", error)
+          // Fallback to default buildings if loading fails
+          setAvailableBuildings(["Main Building"])
+        } finally {
+          setLoadingBuildings(false)
+        }
+      }
+      
+      loadBuildings()
     }
   }, [isOpen])
 
+  // Update floorplan URL when building and floor change
+  useEffect(() => {
+    if (selectedBuilding && selectedFloor) {
+      // Try to get the floor plan URL from Supabase
+      getFloorPlanUrlForBuilding(selectedBuilding, selectedFloor)
+        .then(url => {
+          if (url) {
+            setFloorplanUrl(url)
+          } else {
+            // Fallback to static files if no floor plan found in Supabase
+            if (selectedFloor === "first") {
+              setFloorplanUrl("/floorplan.jpg")
+            } else if (selectedFloor === "second") {
+              setFloorplanUrl("/second-floor-plan.jpg")
+            } else {
+              setFloorplanUrl(null)
+            }
+          }
+        })
+        .catch(() => {
+          // Fallback to static files if error
+          if (selectedFloor === "first") {
+            setFloorplanUrl("/floorplan.jpg")
+          } else if (selectedFloor === "second") {
+            setFloorplanUrl("/second-floor-plan.jpg")
+          } else {
+            setFloorplanUrl(null)
+          }
+        })
+    }
+  }, [selectedBuilding, selectedFloor])
+
   if (!isOpen) return null
+
+  const handleBuildingSelect = async (building: string) => {
+    setSelectedBuilding(building)
+    setSelectedFloor(null)
+    setSelectedLocation(null)
+    
+    // Load available floors for the selected building
+    setLoadingFloors(true)
+    try {
+      const floors = await getAvailableFloors(building)
+      setAvailableFloors(floors)
+    } catch (error) {
+      console.error("Error loading floors:", error)
+      setAvailableFloors([])
+    } finally {
+      setLoadingFloors(false)
+    }
+  }
 
   const handleFloorSelect = (floor: string) => {
     setSelectedFloor(floor)
@@ -77,27 +153,23 @@ export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }:
 
   const handleClose = () => {
     // Reset state when closing
+    setSelectedBuilding(null)
     setSelectedFloor(null)
     setSelectedLocation(null)
     onClose()
   }
 
   const getFloorplanImage = () => {
-    if (selectedFloor === "first") {
-      return "/floorplan.jpg"
-    } else if (selectedFloor === "second") {
-      return "/second-floor-plan.jpg"
-    }
-    return null
+    return floorplanUrl
   }
 
   const getFloorplanAlt = () => {
     if (selectedFloor === "first") {
-      return "School Floorplan - First Floor"
+      return `${selectedBuilding} Floorplan - First Floor`
     } else if (selectedFloor === "second") {
-      return "School Floorplan - Second Floor"
+      return `${selectedBuilding} Floorplan - Second Floor`
     }
-    return "School Floorplan"
+    return `${selectedBuilding} Floorplan`
   }
 
   return (
@@ -109,53 +181,123 @@ export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }:
               <MapPin className="w-5 h-5 text-blue-600" />
               Mark Photo Location on Floorplan
             </CardTitle>
-                       <p className="text-sm text-gray-600 mt-1">
-              {!selectedFloor
-                ? "First select which floor the photo was taken on"
+            <p className="text-sm text-gray-600 mt-1">
+              {!selectedBuilding
+                ? "First select which building the photo was taken in"
+                : !selectedFloor
+                ? "Now select which floor the photo was taken on"
                 : "Click on the floorplan to indicate where this photo was taken"}
             </p>
           </div>
           <Button variant="outline" onClick={handleClose} size="sm">
-
             <X className="w-4 h-4" />
           </Button>
         </CardHeader>
 
         <CardContent className="p-4 flex-1 overflow-y-auto">
-          {/* Floor Selection */}
-          {!selectedFloor && (
+          {/* Building Selection */}
+          {!selectedBuilding && (
             <div className="space-y-4">
               <div className="text-center">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Which floor was this photo taken on?</h3>
-                <div className="flex justify-center gap-4">
-                  <Button
-                    onClick={() => handleFloorSelect("first")}
-                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-4 text-lg"
-                  >
-                    <Building className="w-5 h-5 mr-2" />
-                    First Floor
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Which building was this photo taken in?</h3>
+                {loadingBuildings ? (
+                  <div className="flex justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="ml-2 text-gray-600">Loading buildings...</span>
+                  </div>
+                ) : availableBuildings.length > 0 ? (
+                  <div className="flex flex-wrap justify-center gap-4">
+                    {availableBuildings.map((building, index) => (
+                      <Button
+                        key={building}
+                        onClick={() => handleBuildingSelect(building)}
+                        className={`bg-gradient-to-r text-white px-8 py-4 text-lg ${
+                          index % 2 === 0 
+                            ? "from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                            : "from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                        }`}
+                      >
+                        <Building className="w-5 h-5 mr-2" />
+                        {building}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-gray-500">
+                    <p>No buildings found in database.</p>
+                    <p className="text-sm">Please add walkers with school information first.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Floor Selection */}
+          {selectedBuilding && !selectedFloor && (
+            <div className="space-y-4">
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <Button variant="outline" onClick={() => setSelectedBuilding(null)} size="sm" className="text-gray-600">
+                    ← Change Building
                   </Button>
-                  <Button
-                    onClick={() => handleFloorSelect("second")}
-                    className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-8 py-4 text-lg"
-                  >
-                    <Building className="w-5 h-5 mr-2" />
-                    Second Floor
-                  </Button>
+                  <span className="text-sm font-medium text-gray-700">
+                    Selected: {selectedBuilding}
+                  </span>
                 </div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Which floor was this photo taken on?</h3>
+                {loadingFloors ? (
+                  <div className="flex justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="ml-2 text-gray-600">Loading floors...</span>
+                  </div>
+                ) : availableFloors.length > 0 ? (
+                  <div className="flex flex-wrap justify-center gap-4">
+                    {availableFloors.map((floor, index) => (
+                      <Button
+                        key={floor}
+                        onClick={() => handleFloorSelect(floor)}
+                        className={`bg-gradient-to-r text-white px-8 py-4 text-lg ${
+                          index % 2 === 0 
+                            ? "from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                            : "from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                        }`}
+                      >
+                        <Building className="w-5 h-5 mr-2" />
+                        {floor === "basement" ? "Basement" :
+                         floor === "ground" ? "Ground Floor" :
+                         floor === "first" ? "First Floor" : 
+                         floor === "second" ? "Second Floor" : 
+                         floor === "third" ? "Third Floor" :
+                         floor === "fourth" ? "Fourth Floor" :
+                         floor === "fifth" ? "Fifth Floor" :
+                         floor === "sixth" ? "Sixth Floor" :
+                         floor === "seventh" ? "Seventh Floor" :
+                         floor === "eighth" ? "Eighth Floor" :
+                         floor === "ninth" ? "Ninth Floor" :
+                         floor === "tenth" ? "Tenth Floor" :
+                         floor}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-gray-500">
+                    <p>No floor plans found for {selectedBuilding}.</p>
+                    <p className="text-sm">Please upload floor plans for this building first.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {/* Floorplan Display */}
-          {selectedFloor && (
+          {selectedBuilding && selectedFloor && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 mb-4">
                 <Button variant="outline" onClick={() => setSelectedFloor(null)} size="sm" className="text-gray-600">
                   ← Change Floor
                 </Button>
                 <span className="text-sm font-medium text-gray-700">
-                  Selected: {selectedFloor === "first" ? "First Floor" : "Second Floor"}
+                  {selectedBuilding} • {selectedFloor === "first" ? "First Floor" : "Second Floor"}
                 </span>
               </div>
 
@@ -176,7 +318,6 @@ export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }:
                       height: "auto",
                       display: "block",
                     }}
-                    priority
                   />
 
                   {/* Location Pin */}
