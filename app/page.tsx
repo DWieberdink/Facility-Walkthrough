@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -11,13 +11,19 @@ import { Textarea } from "@/components/ui/textarea"
 import { ChevronRight, Check, User, Mail, Calendar, Plus, Trash2, Building, Calculator, Camera, LogOut } from "lucide-react"
 import { saveAllSurveyData } from "../lib/database"
 import { MessageSquare } from "lucide-react"
-import { PhotoUpload } from "../components/photo-upload"
 import { SchoolCombobox } from "../components/school-combobox"
 import Image from "next/image"
 import { QuestionNavigation } from "../components/question-navigation"
 import { generateQuestionId } from "../lib/utils"
 import Link from "next/link"
 import { sessionUtils, type UserSession } from "../lib/session"
+import dynamic from "next/dynamic"
+
+// Dynamic imports for heavy components
+const PhotoUpload = dynamic(() => import("../components/photo-upload").then(mod => ({ default: mod.PhotoUpload })), {
+  loading: () => <div className="flex items-center justify-center p-4"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>,
+  ssr: false
+})
 
 interface SurveyQuestion {
   survey: string
@@ -40,7 +46,7 @@ interface Response {
 interface RoomDetails {
   roomNumber: string
   gradeServed: string
-  isPortable: "Y" | "N" | ""
+  isPortable: "Y" | "N"
   ceilingHeight: string
   roomType: string
   modeOfInstruction: string
@@ -395,7 +401,7 @@ export default function SurveyApp() {
       roomDetails: {
         roomNumber: "",
         gradeServed: "",
-        isPortable: "",
+        isPortable: "N",
         ceilingHeight: "",
         roomType: "",
         modeOfInstruction: "",

@@ -30,6 +30,7 @@ export interface PhotoRecord {
   location_x?: number | null
   location_y?: number | null
   floor_level?: string | null
+  building?: string | null
 }
 
 /* ------------------------------------------------------------------ */
@@ -133,13 +134,9 @@ export async function getSubmissionPhotos(submissionId: string): Promise<PhotoRe
 /**
  * Produces a (signed or public) URL that can be used in an <img>.
  */
-export async function getPhotoUrl(filePath: string): Promise<string> {
-  // file_path column stores "bucket/file" – strip bucket prefix for the storage helper
-  const relativePath = filePath.startsWith(`${BUCKET}/`) ? filePath.slice(BUCKET.length + 1) : filePath
-
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(relativePath)
-  if (!data?.publicUrl) throw new Error("Failed to generate photo URL")
-  return data.publicUrl
+export async function getPhotoUrl(photoId: string): Promise<string> {
+  // Use the API route that generates signed URLs
+  return `/api/photos/${photoId}`
 }
 
 /* ------------------------------------------------------------------ */

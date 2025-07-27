@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ImageIcon, Download, Trash2, Eye, X, MapPin, Building } from "lucide-react"
 import { getSubmissionPhotos, getPhotoUrl, deletePhoto, type PhotoRecord } from "../lib/storage"
+import Image from "next/image"
 
 interface PhotoGalleryProps {
   submissionId: string
@@ -25,19 +26,26 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
   const loadPhotos = async () => {
     try {
       const photoData = await getSubmissionPhotos(submissionId)
+      console.log("Loaded photo data:", photoData)
       setPhotos(photoData)
 
       // Load URLs for all photos
       const urls: Record<string, string> = {}
       for (const photo of photoData) {
         try {
-          const url = await getPhotoUrl(photo.file_path)
+          const url = await getPhotoUrl(photo.id)
           urls[photo.id] = url
+          console.log(`Photo ${photo.id} URL:`, url)
+          
+          // Test if the URL is accessible
+          const testResponse = await fetch(url, { method: 'HEAD' })
+          console.log(`Photo ${photo.id} accessibility:`, testResponse.status, testResponse.statusText)
         } catch (err) {
           console.error(`Error loading URL for photo ${photo.id}:`, err)
         }
       }
       setPhotoUrls(urls)
+      console.log("All photo URLs:", urls)
     } catch (error) {
       console.error("Error loading photos:", error)
     } finally {
@@ -64,25 +72,37 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
 
   const downloadPhoto = async (photo: PhotoRecord) => {
     const url = photoUrls[photo.id]
-    if (!url) return
+    if (!url) {
+      console.error("No URL available for photo:", photo.id)
+      return
+    }
 
     try {
+      console.log(`Downloading photo ${photo.id} from:`, url)
       const response = await fetch(url)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      
       const blob = await response.blob()
+      console.log(`Downloaded blob size:`, blob.size, 'bytes')
+      
       const downloadUrl = URL.createObjectURL(blob)
-
       const a = document.createElement("a")
       a.href = downloadUrl
-      a.download = photo.file_name
+      a.download = photo.file_name || `photo-${photo.id}.jpg`
       a.click()
 
       URL.revokeObjectURL(downloadUrl)
+      console.log(`✅ Download initiated for photo ${photo.id}`)
     } catch (error) {
-      console.error("Error downloading photo:", error)
+      console.error("❌ Error downloading photo:", error)
+      alert(`Failed to download photo: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
-  const getFloorBadge = (floorLevel: string | null) => {
+  const getFloorBadge = (floorLevel: string | null | undefined) => {
     if (!floorLevel || floorLevel === "unknown") return null
 
     const floorText = floorLevel === "first" ? "1st Floor" : floorLevel === "second" ? "2nd Floor" : floorLevel
@@ -141,10 +161,18 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
                       alt={photo.caption || "Survey photo"}
                       className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
                       onClick={() => setSelectedPhoto(photo)}
+                      onLoad={() => console.log(`✅ Image loaded successfully for photo ${photo.id}`)}
+                      onError={(e) => {
+                        console.error(`❌ Image failed to load for photo ${photo.id}:`, e)
+                        console.error(`❌ Image URL: ${photoUrls[photo.id]}`)
+                        console.error(`❌ Image target:`, e.target)
+                      }}
+                      crossOrigin="anonymous"
                     />
                   ) : (
                     <div className="w-full h-48 bg-gray-200 rounded-lg border flex items-center justify-center">
                       <ImageIcon className="w-8 h-8 text-gray-400" />
+                      <span className="text-xs text-gray-500 ml-2">No URL available</span>
                     </div>
                   )}
 

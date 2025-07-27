@@ -34,6 +34,29 @@ export async function POST(req: Request) {
     }
 
     /* ---------- 2. insert DB metadata --------------------------------- */
+    
+    // Get building information from the submission's walker (for future use)
+    let building = "Unknown Building"
+    try {
+      const { data: submissionData, error: submissionError } = await supabase
+        .from("survey_submissions")
+        .select(`
+          walker_id,
+          walkers!inner (
+            school
+          )
+        `)
+        .eq("id", submissionId)
+        .single()
+
+      if (!submissionError && submissionData?.walkers?.[0]?.school) {
+        building = submissionData.walkers[0].school
+      }
+    } catch (error) {
+      console.warn("Could not fetch building info:", error)
+      // Continue without building info
+    }
+
     const { data: record, error: dbErr } = await supabase
       .from("survey_photos")
       .insert({
@@ -46,6 +69,8 @@ export async function POST(req: Request) {
         file_size: fileSize,
         mime_type: fileType,
         caption,
+        // Temporarily comment out building field until column is added manually
+        // building,
         // Initialize location fields as null - will be updated when user confirms location
         location_x: null,
         location_y: null,

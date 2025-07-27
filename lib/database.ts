@@ -555,9 +555,59 @@ export async function getSurveySubmissions() {
       )
     `)
     .order("created_at", { ascending: false })
+    .limit(50) // Increase limit to show more submissions
 
   if (error) {
     console.error("Error fetching survey submissions:", error)
+    throw error
+  }
+
+  return data
+}
+
+export async function getSurveySubmissionsWithPhotos() {
+  // First get all submission IDs that have photos
+  const { data: photoSubmissions, error: photoError } = await supabase
+    .from("survey_photos")
+    .select("submission_id")
+    .order("uploaded_at", { ascending: false })
+
+  if (photoError) {
+    console.error("Error fetching submissions with photos:", photoError)
+    throw photoError
+  }
+
+  const submissionIds = [...new Set(photoSubmissions?.map((p: { submission_id: string }) => p.submission_id) || [])]
+  
+  if (submissionIds.length === 0) {
+    return []
+  }
+
+  // Then get the full submission data for those IDs
+  const { data, error } = await supabase
+    .from("survey_submissions")
+    .select(`
+      *,
+      walkers (
+        name,
+        email,
+        school
+      ),
+      survey_responses (
+        *
+      ),
+      classroom_entries (
+        *,
+        classroom_responses (
+          *
+        )
+      )
+    `)
+    .in("id", submissionIds)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    console.error("Error fetching survey submissions with photos:", error)
     throw error
   }
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { getSurveySubmissions } from "../../lib/database"
+import { getSurveySubmissions, getSurveySubmissionsWithPhotos } from "../../lib/database"
 import { Calendar, User, School, Building, FileText, Download, Check } from "lucide-react"
 import { PhotoGallery } from "../../components/photo-gallery"
 
@@ -173,12 +173,12 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
-        <Card className="shadow-lg border-0 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold">Survey Administration</CardTitle>
-            <CardDescription className="text-blue-100">View and manage survey submissions</CardDescription>
-          </CardHeader>
-        </Card>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Survey Admin Dashboard</h1>
+            <p className="text-gray-600 mt-1">Submissions with photos</p>
+          </div>
+        </div>
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

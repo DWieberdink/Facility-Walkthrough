@@ -24,6 +24,7 @@ interface PhotoRecord {
   location_x?: number | null
   location_y?: number | null
   floor_level?: string | null
+  building?: string | null
 }
 
 interface SubmissionWithPhotos {
@@ -61,9 +62,38 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
   const getPhotosForCurrentFloor = () => {
     const floor = selectedFloor || currentFloor
     
-    return submissions
-      .flatMap(sub => sub.photos)
-      .filter(photo => photo.floor_level === floor && photo.location_x !== null && photo.location_y !== null)
+    console.log("Filtering photos:", {
+      currentBuilding,
+      floor,
+      totalPhotos: submissions.flatMap(sub => sub.photos).length,
+      submissions: submissions.length
+    })
+    
+    const allPhotos = submissions.flatMap(sub => sub.photos)
+    console.log("All photos:", allPhotos.map(p => ({
+      id: p.id,
+      building: p.building,
+      floor_level: p.floor_level,
+      location_x: p.location_x,
+      location_y: p.location_y
+    })))
+    
+    // Temporarily show all photos with location data for debugging
+    const filteredPhotos = allPhotos.filter(photo => {
+      const hasLocation = photo.location_x !== null && photo.location_y !== null
+      
+      console.log(`Photo ${photo.id}:`, {
+        hasLocation,
+        photoBuilding: photo.building,
+        photoFloor: photo.floor_level,
+        photoLocation: `${photo.location_x}, ${photo.location_y}`
+      })
+      
+      return hasLocation // Show all photos with location data
+    })
+    
+    console.log("Filtered photos:", filteredPhotos.length)
+    return filteredPhotos
   }
 
   const photosOnFloor = getPhotosForCurrentFloor()

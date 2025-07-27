@@ -22,12 +22,12 @@ import {
   Settings,
 } from "lucide-react"
 import { getSubmissionPhotos, getPhotoUrl } from "../../lib/storage"
-import { getSupabase } from "../../lib/supabase"
+import { getSurveySubmissions } from "../../lib/database"
 import { FloorplanGallery } from "../../components/floorplan-gallery"
 import Image from "next/image"
 import Link from "next/link"
 
-const supabase = getSupabase()
+
 
 interface PhotoRecord {
   id: string
@@ -44,6 +44,7 @@ interface PhotoRecord {
   location_x?: number | null
   location_y?: number | null
   floor_level?: string | null
+  building?: string | null
 }
 
 interface SubmissionWithPhotos {
@@ -92,28 +93,17 @@ export default function PhotoGalleryPage() {
       setLoading(true)
       
       // Fetch all survey submissions with walker information
-      const { data: submissionsData, error: submissionsError } = await supabase
-        .from("survey_submissions")
-        .select(`
-          id,
-          created_at,
-          walkers (
-            name,
-            email,
-            school
-          )
-        `)
-        .order("created_at", { ascending: false })
+      const submissionsData = await getSurveySubmissions()
 
-      if (submissionsError) {
-        console.error("Error fetching submissions:", submissionsError)
+      if (!submissionsData) {
+        console.error("Error fetching submissions: No data returned")
         return
       }
 
       // Fetch photos for each submission
       const submissionsWithPhotos: SubmissionWithPhotos[] = []
       
-      for (const submission of submissionsData || []) {
+      for (const submission of submissionsData) {
         try {
           const photos = await getSubmissionPhotos(submission.id)
           submissionsWithPhotos.push({
