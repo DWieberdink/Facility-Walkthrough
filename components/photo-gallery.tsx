@@ -26,7 +26,7 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
   const loadPhotos = async () => {
     try {
       const photoData = await getSubmissionPhotos(submissionId)
-      console.log("Loaded photo data:", photoData)
+  
       setPhotos(photoData)
 
       // Load URLs for all photos
@@ -35,17 +35,14 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
         try {
           const url = await getPhotoUrl(photo.id)
           urls[photo.id] = url
-          console.log(`Photo ${photo.id} URL:`, url)
-          
           // Test if the URL is accessible
           const testResponse = await fetch(url, { method: 'HEAD' })
-          console.log(`Photo ${photo.id} accessibility:`, testResponse.status, testResponse.statusText)
         } catch (err) {
           console.error(`Error loading URL for photo ${photo.id}:`, err)
         }
       }
       setPhotoUrls(urls)
-      console.log("All photo URLs:", urls)
+      
     } catch (error) {
       console.error("Error loading photos:", error)
     } finally {
@@ -78,7 +75,7 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
     }
 
     try {
-      console.log(`Downloading photo ${photo.id} from:`, url)
+      
       const response = await fetch(url)
       
       if (!response.ok) {
@@ -86,7 +83,7 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
       }
       
       const blob = await response.blob()
-      console.log(`Downloaded blob size:`, blob.size, 'bytes')
+      
       
       const downloadUrl = URL.createObjectURL(blob)
       const a = document.createElement("a")
@@ -95,7 +92,7 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
       a.click()
 
       URL.revokeObjectURL(downloadUrl)
-      console.log(`✅ Download initiated for photo ${photo.id}`)
+      
     } catch (error) {
       console.error("❌ Error downloading photo:", error)
       alert(`Failed to download photo: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -105,7 +102,19 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
   const getFloorBadge = (floorLevel: string | null | undefined) => {
     if (!floorLevel || floorLevel === "unknown") return null
 
-    const floorText = floorLevel === "first" ? "1st Floor" : floorLevel === "second" ? "2nd Floor" : floorLevel
+    const floorText = floorLevel === "basement" ? "Basement" :
+                     floorLevel === "first" ? "1st Floor" :
+                     floorLevel === "second" ? "2nd Floor" :
+                     floorLevel === "third" ? "3rd Floor" :
+                     floorLevel === "fourth" ? "4th Floor" :
+                     floorLevel === "fifth" ? "5th Floor" :
+                     floorLevel === "sixth" ? "6th Floor" :
+                     floorLevel === "seventh" ? "7th Floor" :
+                     floorLevel === "eighth" ? "8th Floor" :
+                     floorLevel === "ninth" ? "9th Floor" :
+                     floorLevel === "tenth" ? "10th Floor" :
+                     floorLevel
+
     const colorClass =
       floorLevel === "first"
         ? "bg-blue-50 text-blue-700 border-blue-200"
@@ -161,7 +170,7 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
                       alt={photo.caption || "Survey photo"}
                       className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
                       onClick={() => setSelectedPhoto(photo)}
-                      onLoad={() => console.log(`✅ Image loaded successfully for photo ${photo.id}`)}
+                      onLoad={() => {}}
                       onError={(e) => {
                         console.error(`❌ Image failed to load for photo ${photo.id}:`, e)
                         console.error(`❌ Image URL: ${photoUrls[photo.id]}`)
@@ -257,7 +266,18 @@ export function PhotoGallery({ submissionId, canDelete = false }: PhotoGalleryPr
                       Location: {selectedPhoto.location_x?.toFixed(1)}%, {selectedPhoto.location_y?.toFixed(1)}%
                       {selectedPhoto.floor_level &&
                         selectedPhoto.floor_level !== "unknown" &&
-                        ` on ${selectedPhoto.floor_level} floor`}
+                        ` on ${selectedPhoto.floor_level === "basement" ? "Basement" :
+                             selectedPhoto.floor_level === "first" ? "First Floor" :
+                             selectedPhoto.floor_level === "second" ? "Second Floor" :
+                             selectedPhoto.floor_level === "third" ? "Third Floor" :
+                             selectedPhoto.floor_level === "fourth" ? "Fourth Floor" :
+                             selectedPhoto.floor_level === "fifth" ? "Fifth Floor" :
+                             selectedPhoto.floor_level === "sixth" ? "Sixth Floor" :
+                             selectedPhoto.floor_level === "seventh" ? "Seventh Floor" :
+                             selectedPhoto.floor_level === "eighth" ? "Eighth Floor" :
+                             selectedPhoto.floor_level === "ninth" ? "Ninth Floor" :
+                             selectedPhoto.floor_level === "tenth" ? "Tenth Floor" :
+                             selectedPhoto.floor_level} floor`}
                     </p>
                   </div>
                 )}

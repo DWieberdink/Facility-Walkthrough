@@ -95,13 +95,13 @@ export async function uploadSurveyPhoto(payload: PhotoUpload): Promise<PhotoReco
 /* ------------------------------------------------------------------ */
 /*  Update photo location and floor                                   */
 /* ------------------------------------------------------------------ */
-export async function updatePhotoLocation(photoId: string, x: number, y: number, floor?: string): Promise<PhotoRecord> {
+export async function updatePhotoLocation(photoId: string, x: number, y: number, floor?: string, building?: string): Promise<PhotoRecord> {
   const res = await fetch("/api/photos/location", {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ photoId, x, y, floor }),
+    body: JSON.stringify({ photoId, x, y, floor, building }),
   })
 
   if (!res.ok) {

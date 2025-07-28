@@ -28,7 +28,7 @@ CREATE TABLE survey_photos (
     uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     location_x DECIMAL(5,2),
     location_y DECIMAL(5,2),
-    floor_level TEXT CHECK (floor_level IN ('basement', 'ground', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth')),
+    floor_level TEXT CHECK (floor_level IN ('basement', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

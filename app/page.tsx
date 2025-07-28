@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { ChevronRight, Check, User, Mail, Calendar, Plus, Trash2, Building, Calculator, Camera, LogOut } from "lucide-react"
 import { saveAllSurveyData } from "../lib/database"
-import { MessageSquare } from "lucide-react"
 import { SchoolCombobox } from "../components/school-combobox"
 import Image from "next/image"
 import { QuestionNavigation } from "../components/question-navigation"
@@ -127,7 +126,7 @@ export default function SurveyApp() {
       newProgress[surveyName] = isSurveyCompleted(surveyName)
     })
     setSurveyProgress(newProgress)
-    console.log("Updated survey progress:", newProgress)
+
   }
 
   // Get completed surveys count

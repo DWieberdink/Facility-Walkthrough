@@ -62,43 +62,26 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
   const getPhotosForCurrentFloor = () => {
     const floor = selectedFloor || currentFloor
     
-    console.log("Filtering photos:", {
-      currentBuilding,
-      floor,
-      totalPhotos: submissions.flatMap(sub => sub.photos).length,
-      submissions: submissions.length
-    })
-    
     const allPhotos = submissions.flatMap(sub => sub.photos)
-    console.log("All photos:", allPhotos.map(p => ({
-      id: p.id,
-      building: p.building,
-      floor_level: p.floor_level,
-      location_x: p.location_x,
-      location_y: p.location_y
-    })))
     
-    // Temporarily show all photos with location data for debugging
+    // Filter photos by building and floor
     const filteredPhotos = allPhotos.filter(photo => {
       const hasLocation = photo.location_x !== null && photo.location_y !== null
+      const matchesBuilding = !currentBuilding || photo.building === currentBuilding
+      const matchesFloor = !floor || photo.floor_level === floor
       
-      console.log(`Photo ${photo.id}:`, {
-        hasLocation,
-        photoBuilding: photo.building,
-        photoFloor: photo.floor_level,
-        photoLocation: `${photo.location_x}, ${photo.location_y}`
-      })
+
       
-      return hasLocation // Show all photos with location data
+      return hasLocation && matchesBuilding && matchesFloor
     })
     
-    console.log("Filtered photos:", filteredPhotos.length)
+
     return filteredPhotos
   }
 
   const photosOnFloor = getPhotosForCurrentFloor()
 
-  const [floorplanUrl, setFloorplanUrl] = useState<string>("/floorplan.jpg")
+  const [floorplanUrl, setFloorplanUrl] = useState<string | null>(null)
   const [loadingFloorplan, setLoadingFloorplan] = useState(false)
 
   // Load available buildings when modal opens
@@ -108,7 +91,7 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
         setLoadingBuildings(true)
         try {
           const buildings = await getAvailableBuildings()
-          console.log("Available buildings:", buildings)
+
           setAvailableBuildings(buildings)
           
           // Set the first building as current if available
@@ -118,7 +101,21 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
             
             // Load floors for the first building
             const floors = await getAvailableFloors(firstBuilding)
-            console.log("Available floors for", firstBuilding, ":", floors)
+            const formattedFloors = floors.map(floor => 
+              floor === "basement" ? "Basement" :
+              floor === "first" ? "First Floor" :
+              floor === "second" ? "Second Floor" :
+              floor === "third" ? "Third Floor" :
+              floor === "fourth" ? "Fourth Floor" :
+              floor === "fifth" ? "Fifth Floor" :
+              floor === "sixth" ? "Sixth Floor" :
+              floor === "seventh" ? "Seventh Floor" :
+              floor === "eighth" ? "Eighth Floor" :
+              floor === "ninth" ? "Ninth Floor" :
+              floor === "tenth" ? "Tenth Floor" :
+              floor
+            )
+
             setAvailableFloors(floors)
             if (floors.length > 0) {
               setCurrentFloor(floors[0])
@@ -168,25 +165,13 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
           if (url) {
             setFloorplanUrl(url)
           } else {
-            // Fallback to static files if no floor plan found in Supabase
-            if (currentFloor === "first") {
-              setFloorplanUrl("/floorplan.jpg")
-            } else if (currentFloor === "second") {
-              setFloorplanUrl("/second-floor-plan.jpg")
-            } else {
-              setFloorplanUrl("/floorplan.jpg")
-            }
+            // No floor plan found for this building/floor combination
+            setFloorplanUrl(null)
           }
         })
         .catch(() => {
-          // Fallback to static files if error
-          if (currentFloor === "first") {
-            setFloorplanUrl("/floorplan.jpg")
-          } else if (currentFloor === "second") {
-            setFloorplanUrl("/second-floor-plan.jpg")
-          } else {
-            setFloorplanUrl("/floorplan.jpg")
-          }
+          // Error getting floor plan
+          setFloorplanUrl(null)
         })
         .finally(() => {
           setLoadingFloorplan(false)
@@ -195,14 +180,32 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
   }, [currentBuilding, currentFloor])
 
   const getFloorplanImage = () => {
-    return floorplanUrl
+    return floorplanUrl || undefined
   }
 
   const getFloorplanAlt = () => {
-    if (currentFloor === "first") {
+    if (currentFloor === "basement") {
+      return "School Floorplan - Basement"
+    } else if (currentFloor === "first") {
       return "School Floorplan - First Floor"
     } else if (currentFloor === "second") {
       return "School Floorplan - Second Floor"
+    } else if (currentFloor === "third") {
+      return "School Floorplan - Third Floor"
+    } else if (currentFloor === "fourth") {
+      return "School Floorplan - Fourth Floor"
+    } else if (currentFloor === "fifth") {
+      return "School Floorplan - Fifth Floor"
+    } else if (currentFloor === "sixth") {
+      return "School Floorplan - Sixth Floor"
+    } else if (currentFloor === "seventh") {
+      return "School Floorplan - Seventh Floor"
+    } else if (currentFloor === "eighth") {
+      return "School Floorplan - Eighth Floor"
+    } else if (currentFloor === "ninth") {
+      return "School Floorplan - Ninth Floor"
+    } else if (currentFloor === "tenth") {
+      return "School Floorplan - Tenth Floor"
     }
     return "School Floorplan"
   }
@@ -264,7 +267,18 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
               Floor Plan View
             </CardTitle>
             <p className="text-sm text-gray-600 mt-1">
-              {currentBuilding || "Loading buildings..."} • {currentFloor === "first" ? "First Floor" : currentFloor === "second" ? "Second Floor" : currentFloor} • {photosOnFloor.length} photos
+              {currentBuilding || "Loading buildings..."} • {currentFloor === "basement" ? "Basement" :
+                                                           currentFloor === "first" ? "First Floor" :
+                                                           currentFloor === "second" ? "Second Floor" :
+                                                           currentFloor === "third" ? "Third Floor" :
+                                                           currentFloor === "fourth" ? "Fourth Floor" :
+                                                           currentFloor === "fifth" ? "Fifth Floor" :
+                                                           currentFloor === "sixth" ? "Sixth Floor" :
+                                                           currentFloor === "seventh" ? "Seventh Floor" :
+                                                           currentFloor === "eighth" ? "Eighth Floor" :
+                                                           currentFloor === "ninth" ? "Ninth Floor" :
+                                                           currentFloor === "tenth" ? "Tenth Floor" :
+                                                           currentFloor} • {photosOnFloor.length} photos
             </p>
           </div>
           <Button variant="outline" onClick={onClose} size="sm">
@@ -315,11 +329,17 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
                           onClick={() => setCurrentFloor(floor)}
                           className="rounded-none border-0"
                         >
-                          {floor === "first" ? "First Floor" : 
+                          {floor === "basement" ? "Basement" :
+                           floor === "first" ? "First Floor" : 
                            floor === "second" ? "Second Floor" : 
-                           floor === "basement" ? "Basement" :
                            floor === "third" ? "Third Floor" :
                            floor === "fourth" ? "Fourth Floor" :
+                           floor === "fifth" ? "Fifth Floor" :
+                           floor === "sixth" ? "Sixth Floor" :
+                           floor === "seventh" ? "Seventh Floor" :
+                           floor === "eighth" ? "Eighth Floor" :
+                           floor === "ninth" ? "Ninth Floor" :
+                           floor === "tenth" ? "Tenth Floor" :
                            floor}
                         </Button>
                       ))}
@@ -348,10 +368,10 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
                     <span className="text-gray-600">Loading floor plan...</span>
                   </div>
                 </div>
-              ) : (
+              ) : floorplanUrl ? (
                 <img
                   ref={imageRef}
-                  src={getFloorplanImage()}
+                  src={floorplanUrl}
                   alt={getFloorplanAlt()}
                   className="w-full h-auto block"
                   style={{
@@ -360,6 +380,14 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
                     display: "block",
                   }}
                 />
+              ) : (
+                <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
+                  <div className="text-center">
+                    <Building className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                    <p className="text-gray-600">No floor plan available for {currentBuilding} - {currentFloor} floor</p>
+                    <p className="text-sm text-gray-500 mt-1">Please upload a floor plan for this building and floor</p>
+                  </div>
+                </div>
               )}
 
               {/* Photo Pins */}
@@ -558,8 +586,17 @@ export function FloorplanGallery({ isOpen, onClose, submissions, selectedBuildin
                       <div>
                         <span className="font-medium text-gray-700">Floor:</span>
                         <p className="text-gray-600">
-                          {selectedPhoto.floor_level === "first" ? "First Floor" : 
-                           selectedPhoto.floor_level === "second" ? "Second Floor" : 
+                          {selectedPhoto.floor_level === "basement" ? "Basement" :
+                           selectedPhoto.floor_level === "first" ? "First Floor" : 
+                           selectedPhoto.floor_level === "second" ? "Second Floor" :
+                           selectedPhoto.floor_level === "third" ? "Third Floor" :
+                           selectedPhoto.floor_level === "fourth" ? "Fourth Floor" :
+                           selectedPhoto.floor_level === "fifth" ? "Fifth Floor" :
+                           selectedPhoto.floor_level === "sixth" ? "Sixth Floor" :
+                           selectedPhoto.floor_level === "seventh" ? "Seventh Floor" :
+                           selectedPhoto.floor_level === "eighth" ? "Eighth Floor" :
+                           selectedPhoto.floor_level === "ninth" ? "Ninth Floor" :
+                           selectedPhoto.floor_level === "tenth" ? "Tenth Floor" :
                            selectedPhoto.floor_level || "Unknown"}
                         </p>
                       </div>

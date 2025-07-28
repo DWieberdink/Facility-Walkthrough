@@ -11,7 +11,7 @@ import { getFloorPlanUrlForBuilding, getAvailableBuildings, getAvailableFloors }
 interface FloorplanModalProps {
   isOpen: boolean
   onClose: () => void
-  onLocationSelected: (x: number, y: number, floor: string) => void
+  onLocationSelected: (x: number, y: number, floor: string, building: string) => void
   photoId?: string
 }
 
@@ -33,6 +33,7 @@ export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }:
   const [selectedBuilding, setSelectedBuilding] = useState<string | null>(null)
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null)
   const [selectedLocation, setSelectedLocation] = useState<LocationPin | null>(null)
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null)
   const [floorplanUrl, setFloorplanUrl] = useState<string | null>(null)
   const [availableBuildings, setAvailableBuildings] = useState<string[]>([])
   const [availableFloors, setAvailableFloors] = useState<string[]>([])
@@ -104,25 +105,13 @@ export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }:
           if (url) {
             setFloorplanUrl(url)
           } else {
-            // Fallback to static files if no floor plan found in Supabase
-            if (selectedFloor === "first") {
-              setFloorplanUrl("/floorplan.jpg")
-            } else if (selectedFloor === "second") {
-              setFloorplanUrl("/second-floor-plan.jpg")
-            } else {
-              setFloorplanUrl(null)
-            }
+            // No floor plan found for this building/floor combination
+            setFloorplanUrl(null)
           }
         })
         .catch(() => {
-          // Fallback to static files if error
-          if (selectedFloor === "first") {
-            setFloorplanUrl("/floorplan.jpg")
-          } else if (selectedFloor === "second") {
-            setFloorplanUrl("/second-floor-plan.jpg")
-          } else {
-            setFloorplanUrl(null)
-          }
+          // Error getting floor plan
+          setFloorplanUrl(null)
         })
     }
   }, [selectedBuilding, selectedFloor])
@@ -237,42 +226,34 @@ export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }:
       return
     }
 
-    // Get the actual image element and its bounding rectangle
+    // Get the image element and its bounding rectangle
     const img = imageRef.current
     const rect = img.getBoundingClientRect()
 
-    // Calculate the click position relative to the image bounds
-    // We need to account for the zoom and pan transformations
+    // Calculate the click position relative to the image element
     const clickX = event.clientX - rect.left
     const clickY = event.clientY - rect.top
 
-    // Convert from screen coordinates to image coordinates
-    // Subtract the pan offset and divide by zoom scale
-    const imageX = (clickX - zoomState.translateX) / zoomState.scale
-    const imageY = (clickY - zoomState.translateY) / zoomState.scale
-
-    // Convert to percentage based on the actual image dimensions
-    const x = (imageX / rect.width) * 100
-    const y = (imageY / rect.height) * 100
+    // Convert to percentage based on the image's actual dimensions
+    const x = (clickX / rect.width) * 100
+    const y = (clickY / rect.height) * 100
 
     // Ensure coordinates are within bounds (0-100%)
     const boundedX = Math.max(0, Math.min(100, x))
     const boundedY = Math.max(0, Math.min(100, y))
 
-    console.log(`Click coordinates: ${boundedX.toFixed(2)}%, ${boundedY.toFixed(2)}% (zoom: ${zoomState.scale}x, pan: ${zoomState.translateX}, ${zoomState.translateY})`)
-
     setSelectedLocation({ x: boundedX, y: boundedY })
   }
 
   const handleConfirmLocation = () => {
-    if (selectedLocation && selectedFloor) {
-      onLocationSelected(selectedLocation.x, selectedLocation.y, selectedFloor)
+    if (selectedLocation && selectedFloor && selectedBuilding) {
+      onLocationSelected(selectedLocation.x, selectedLocation.y, selectedFloor, selectedBuilding)
       onClose()
     }
   }
 
   const handleSkip = () => {
-    onLocationSelected(0, 0, "unknown") // Default coordinates when skipped
+    onLocationSelected(0, 0, "unknown", "Unknown Building") // Default coordinates when skipped
     onClose()
   }
 
@@ -289,10 +270,28 @@ export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }:
   }
 
   const getFloorplanAlt = () => {
-    if (selectedFloor === "first") {
+    if (selectedFloor === "basement") {
+      return `${selectedBuilding} Floorplan - Basement`
+    } else if (selectedFloor === "first") {
       return `${selectedBuilding} Floorplan - First Floor`
     } else if (selectedFloor === "second") {
       return `${selectedBuilding} Floorplan - Second Floor`
+    } else if (selectedFloor === "third") {
+      return `${selectedBuilding} Floorplan - Third Floor`
+    } else if (selectedFloor === "fourth") {
+      return `${selectedBuilding} Floorplan - Fourth Floor`
+    } else if (selectedFloor === "fifth") {
+      return `${selectedBuilding} Floorplan - Fifth Floor`
+    } else if (selectedFloor === "sixth") {
+      return `${selectedBuilding} Floorplan - Sixth Floor`
+    } else if (selectedFloor === "seventh") {
+      return `${selectedBuilding} Floorplan - Seventh Floor`
+    } else if (selectedFloor === "eighth") {
+      return `${selectedBuilding} Floorplan - Eighth Floor`
+    } else if (selectedFloor === "ninth") {
+      return `${selectedBuilding} Floorplan - Ninth Floor`
+    } else if (selectedFloor === "tenth") {
+      return `${selectedBuilding} Floorplan - Tenth Floor`
     }
     return `${selectedBuilding} Floorplan`
   }
@@ -389,7 +388,6 @@ export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }:
                       >
                         <Building className="w-5 h-5 mr-2" />
                         {floor === "basement" ? "Basement" :
-                         floor === "ground" ? "Ground Floor" :
                          floor === "first" ? "First Floor" : 
                          floor === "second" ? "Second Floor" : 
                          floor === "third" ? "Third Floor" :
@@ -423,7 +421,18 @@ export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }:
                     ← Change Floor
                   </Button>
                   <span className="text-sm font-medium text-gray-700">
-                    {selectedBuilding} • {selectedFloor === "first" ? "First Floor" : "Second Floor"}
+                    {selectedBuilding} • {selectedFloor === "basement" ? "Basement" :
+                                         selectedFloor === "first" ? "First Floor" :
+                                         selectedFloor === "second" ? "Second Floor" :
+                                         selectedFloor === "third" ? "Third Floor" :
+                                         selectedFloor === "fourth" ? "Fourth Floor" :
+                                         selectedFloor === "fifth" ? "Fifth Floor" :
+                                         selectedFloor === "sixth" ? "Sixth Floor" :
+                                         selectedFloor === "seventh" ? "Seventh Floor" :
+                                         selectedFloor === "eighth" ? "Eighth Floor" :
+                                         selectedFloor === "ninth" ? "Ninth Floor" :
+                                         selectedFloor === "tenth" ? "Tenth Floor" :
+                                         selectedFloor}
                   </span>
                 </div>
                 
@@ -481,30 +490,45 @@ export function FloorplanModal({ isOpen, onClose, onLocationSelected, photoId }:
                     transition: zoomState.isDragging ? 'none' : 'transform 0.1s ease-out'
                   }}
                 >
-                  <img
-                    ref={imageRef}
-                    src={getFloorplanImage()! || "/placeholder.svg"}
-                    alt={getFloorplanAlt()}
-                    className="w-full h-auto block"
-                    onClick={handleImageClick}
-                    onLoad={() => {
-                      console.log("Floorplan image loaded and ready for interaction")
-                    }}
-                    style={{
-                      maxWidth: "100%",
-                      height: "auto",
-                      display: "block",
-                      pointerEvents: 'auto'
-                    }}
-                  />
+                  {floorplanUrl ? (
+                    <img
+                      ref={imageRef}
+                      src={floorplanUrl}
+                      alt={getFloorplanAlt()}
+                      className="w-full h-auto block"
+                      onClick={handleImageClick}
+                      onLoad={(e) => {
+                        const img = e.target as HTMLImageElement
+                        setImageDimensions({
+                          width: img.offsetWidth,
+                          height: img.offsetHeight
+                        })
+                      }}
+                      style={{
+                        maxWidth: "100%",
+                        height: "auto",
+                        display: "block",
+                        pointerEvents: 'auto'
+                      }}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-64 bg-gray-100 rounded-lg">
+                      <div className="text-center">
+                        <Building className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-600">No floor plan available for {selectedBuilding} - {selectedFloor} floor</p>
+                        <p className="text-sm text-gray-500 mt-1">Please upload a floor plan for this building and floor</p>
+                      </div>
+                    </div>
+                  )}
 
-                  {/* Location Pin */}
+                  {/* Location Pin - Positioned inside the transformed div */}
                   {selectedLocation && (
                     <div
-                      className="absolute transform -translate-x-1/2 -translate-y-full pointer-events-none z-10"
+                      className="absolute pointer-events-none z-10"
                       style={{
                         left: `${selectedLocation.x}%`,
                         top: `${selectedLocation.y}%`,
+                        transform: 'translate(-50%, -100%)',
                       }}
                     >
                       <div className="bg-red-500 text-white rounded-full p-2 shadow-lg animate-bounce">

@@ -31,8 +31,9 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error
     return NextResponse.json({ record: data })
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : "Server error"
     console.error("Photo record insert error:", err)
-    return NextResponse.json({ error: err.message ?? "Server error" }, { status: 500 })
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

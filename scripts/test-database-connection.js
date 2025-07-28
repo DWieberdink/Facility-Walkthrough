@@ -1,85 +1,95 @@
 const { createClient } = require('@supabase/supabase-js')
 
-// Load environment variables
-require('dotenv').config({ path: '.env.local' })
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-console.log('Testing database connection...')
-console.log('URL:', supabaseUrl)
-console.log('Key exists:', !!supabaseKey)
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing environment variables!')
-  process.exit(1)
-}
+// Supabase configuration
+const supabaseUrl = 'https://qvpfvpyrgylfbwmbtobm.supabase.co'
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2cGZ2cHlyZ3lsZmJ3bWJ0b2JtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzODY0MDYsImV4cCI6MjA2ODk2MjQwNn0.aLAJinWwQ8e3DcNjYBBDm0Rx04u0pnm1Ury4pdn37l0'
 
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-async function testConnection() {
+async function testDatabaseConnection() {
+  console.log('🔍 Testing database connection...')
+  
   try {
-    console.log('\n1. Testing basic connection...')
+    // Test 1: Check if survey_photos table exists and get its structure
+    console.log('\n1. Checking survey_photos table structure...')
+    const { data: photos, error: photosError } = await supabase
+      .from('survey_photos')
+      .select('*')
+      .limit(5)
     
-    // Test if we can connect to Supabase
-    const { data, error } = await supabase.from('walkers').select('count').limit(1)
-    
-    if (error) {
-      console.error('❌ Connection failed:', error.message)
-      
-      if (error.message.includes('relation "walkers" does not exist')) {
-        console.log('\n💡 The walkers table does not exist. You need to run the setup script.')
-        console.log('Go to your Supabase dashboard → SQL Editor → New query')
-        console.log('Copy and paste the contents of scripts/setup-database-tables.sql')
-        console.log('Then click "Run"')
-      }
-      
-      return false
-    }
-    
-    console.log('✅ Connection successful!')
-    
-    // Test inserting a walker
-    console.log('\n2. Testing walker insertion...')
-    const { data: insertData, error: insertError } = await supabase
-      .from('walkers')
-      .insert({
-        name: 'Test User',
-        email: 'test@example.com',
-        school: 'Test School'
-      })
-      .select()
-      .single()
-    
-    if (insertError) {
-      console.error('❌ Insert failed:', insertError.message)
-      return false
-    }
-    
-    console.log('✅ Walker insertion successful:', insertData)
-    
-    // Clean up test data
-    console.log('\n3. Cleaning up test data...')
-    const { error: deleteError } = await supabase
-      .from('walkers')
-      .delete()
-      .eq('email', 'test@example.com')
-    
-    if (deleteError) {
-      console.warn('⚠️ Cleanup failed:', deleteError.message)
+    if (photosError) {
+      console.error('❌ Error accessing survey_photos table:', photosError)
     } else {
-      console.log('✅ Test data cleaned up')
+      console.log('✅ survey_photos table accessible')
+      console.log('Sample photo data:', photos?.[0] ? Object.keys(photos[0]) : 'No photos found')
+      if (photos?.[0]) {
+        console.log('Photo columns:', Object.keys(photos[0]))
+      }
     }
+
+    // Test 2: Check if building column exists
+    console.log('\n2. Checking if building column exists...')
+    const { data: buildingTest, error: buildingError } = await supabase
+      .from('survey_photos')
+      .select('building')
+      .limit(1)
     
-    console.log('\n🎉 Database connection test passed!')
-    return true
+    if (buildingError && buildingError.code === '42703') {
+      console.log('❌ Building column does not exist')
+    } else if (buildingError) {
+      console.error('❌ Error checking building column:', buildingError)
+    } else {
+      console.log('✅ Building column exists')
+    }
+
+    // Test 3: Check walkers table
+    console.log('\n3. Checking walkers table...')
+    const { data: walkers, error: walkersError } = await supabase
+      .from('walkers')
+      .select('id, name, school')
+      .limit(5)
+    
+    if (walkersError) {
+      console.error('❌ Error accessing walkers table:', walkersError)
+    } else {
+      console.log('✅ walkers table accessible')
+      console.log('Sample walkers:', walkers?.map(w => ({ name: w.name, school: w.school })))
+    }
+
+    // Test 4: Check survey_submissions table
+    console.log('\n4. Checking survey_submissions table...')
+    const { data: submissions, error: submissionsError } = await supabase
+      .from('survey_submissions')
+      .select('id, walker_id, date_walked')
+      .limit(5)
+    
+    if (submissionsError) {
+      console.error('❌ Error accessing survey_submissions table:', submissionsError)
+    } else {
+      console.log('✅ survey_submissions table accessible')
+      console.log('Sample submissions:', submissions?.length || 0, 'found')
+    }
+
+    // Test 5: Check floor_plans table
+    console.log('\n5. Checking floor_plans table...')
+    const { data: floorPlans, error: floorPlansError } = await supabase
+      .from('floor_plans')
+      .select('building_name, floor_level')
+      .limit(5)
+    
+    if (floorPlansError) {
+      console.error('❌ Error accessing floor_plans table:', floorPlansError)
+    } else {
+      console.log('✅ floor_plans table accessible')
+      console.log('Sample floor plans:', floorPlans?.map(fp => ({ building: fp.building_name, floor: fp.floor_level })))
+    }
+
+    console.log('\n🎉 Database connection test completed!')
     
   } catch (error) {
-    console.error('❌ Unexpected error:', error.message)
-    return false
+    console.error('❌ Error during database test:', error)
   }
 }
 
-testConnection().then(success => {
-  process.exit(success ? 0 : 1)
-}) 
+// Run the test
+testDatabaseConnection() 

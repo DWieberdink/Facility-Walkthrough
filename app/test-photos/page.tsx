@@ -16,7 +16,7 @@ export default function TestPhotosPage() {
       // Use a submission ID that we know has photos
       const submissionId = "586f8f9b-6afe-4dd6-9458-26e80b962899"
       const photoData = await getSubmissionPhotos(submissionId)
-      console.log("Test page: Loaded photos:", photoData)
+  
       setPhotos(photoData)
     } catch (error) {
       console.error("Error loading photos:", error)
@@ -41,14 +41,25 @@ export default function TestPhotosPage() {
             <p>Category: {photo.survey_category}</p>
             <p>File: {photo.file_name}</p>
             <p>Location: {photo.location_x}, {photo.location_y}</p>
-            <p>Floor: {photo.floor_level}</p>
+            <p>Floor: {photo.floor_level === "basement" ? "Basement" :
+                       photo.floor_level === "first" ? "First Floor" :
+                       photo.floor_level === "second" ? "Second Floor" :
+                       photo.floor_level === "third" ? "Third Floor" :
+                       photo.floor_level === "fourth" ? "Fourth Floor" :
+                       photo.floor_level === "fifth" ? "Fifth Floor" :
+                       photo.floor_level === "sixth" ? "Sixth Floor" :
+                       photo.floor_level === "seventh" ? "Seventh Floor" :
+                       photo.floor_level === "eighth" ? "Eighth Floor" :
+                       photo.floor_level === "ninth" ? "Ninth Floor" :
+                       photo.floor_level === "tenth" ? "Tenth Floor" :
+                       photo.floor_level || "Unknown"}</p>
             
             <div className="mt-4">
               <img
                 src={`/api/photos/${photo.id}`}
                 alt={photo.caption || "Test photo"}
                 className="w-full h-48 object-cover rounded-lg border"
-                onLoad={() => console.log(`Image loaded: ${photo.id}`)}
+                onLoad={() => {}}
                 onError={(e) => console.error(`Image failed to load: ${photo.id}`, e)}
               />
             </div>

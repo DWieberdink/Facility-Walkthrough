@@ -3,7 +3,7 @@ import { getSupabaseServer } from "@/lib/supabase-server"
 
 export async function PATCH(req: Request) {
   try {
-    const { photoId, x, y, floor } = await req.json()
+    const { photoId, x, y, floor, building } = await req.json()
 
     if (!photoId || typeof x !== "number" || typeof y !== "number") {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -11,7 +11,12 @@ export async function PATCH(req: Request) {
 
     const supabase = getSupabaseServer()
 
-    const updateData: any = {
+    const updateData: {
+      location_x: number
+      location_y: number
+      floor_level?: string
+      building?: string
+    } = {
       location_x: x,
       location_y: y,
     }
@@ -21,6 +26,11 @@ export async function PATCH(req: Request) {
       updateData.floor_level = floor
     }
 
+    // Add building if provided
+    if (building && building !== "Unknown Building") {
+      updateData.building = building
+    }
+
     const { data, error } = await supabase.from("survey_photos").update(updateData).eq("id", photoId).select().single()
 
     if (error) {
@@ -28,11 +38,12 @@ export async function PATCH(req: Request) {
       throw error
     }
 
-    console.log(`Updated photo ${photoId} with location: ${x.toFixed(2)}%, ${y.toFixed(2)}% on ${floor} floor`)
+    console.log(`Updated photo ${photoId} with location: ${x.toFixed(2)}%, ${y.toFixed(2)}% on ${floor} floor in ${building || 'Unknown Building'}`)
 
     return NextResponse.json({ success: true, record: data })
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : "Server error"
     console.error("Photo location update error:", err)
-    return NextResponse.json({ error: err.message ?? "Server error" }, { status: 500 })
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

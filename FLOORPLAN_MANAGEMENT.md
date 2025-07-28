@@ -6,14 +6,12 @@ This guide explains how to manage floor plans in your survey application. Floor 
 
 ## Current Setup
 
-### Static Files (Legacy)
-- `public/floorplan.jpg` - First floor plan
-- `public/second-floor-plan.jpg` - Second floor plan
-
-### Supabase Storage (New)
+### Supabase Storage (Current)
 - **Storage Bucket**: `floor-plans`
 - **Database Table**: `floor_plans`
 - **Admin Interface**: `/admin/floorplans`
+
+**Note**: Static default floor plans have been removed. All floor plans must now be uploaded through the Supabase system.
 
 ## Migration Process
 
@@ -187,7 +185,7 @@ await deleteFloorPlan(planId)
 interface FloorplanModalProps {
   isOpen: boolean
   onClose: () => void
-  onLocationSelected: (x: number, y: number, floor: string) => void
+  onLocationSelected: (x: number, y: number, floor: string, building: string) => void
   photoId?: string
 }
 

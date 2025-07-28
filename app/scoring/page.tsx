@@ -145,7 +145,7 @@ export default function PhotoGalleryPage() {
       )
     }
 
-    // Filter by school
+    // Filter by school (walker's school)
     if (selectedSchool !== "all") {
       filtered = filtered.filter((submission) => submission.walkers?.school === selectedSchool)
     }
@@ -154,26 +154,17 @@ export default function PhotoGalleryPage() {
     const grouped: GroupedPhotos = {}
     
     filtered.forEach(submission => {
-      const building = submission.walkers?.school || "Unknown Building"
-      
-      if (!grouped[building]) {
-        grouped[building] = {}
-      }
-
-      // Group photos by floor
-      const photosByFloor: { [floor: string]: PhotoRecord[] } = {}
-      
+      // Group photos by their individual building and floor
       submission.photos.forEach(photo => {
+        const building = photo.building || submission.walkers?.school || "Unknown Building"
         const floor = photo.floor_level || "Unknown Floor"
         
-        if (!photosByFloor[floor]) {
-          photosByFloor[floor] = []
-        }
-        photosByFloor[floor].push(photo)
-      })
 
-      // Add to grouped structure
-      Object.keys(photosByFloor).forEach(floor => {
+        
+        if (!grouped[building]) {
+          grouped[building] = {}
+        }
+        
         if (!grouped[building][floor]) {
           grouped[building][floor] = {
             photos: [],
@@ -181,8 +172,12 @@ export default function PhotoGalleryPage() {
           }
         }
         
-        grouped[building][floor].photos.push(...photosByFloor[floor])
-        grouped[building][floor].submissions.push(submission)
+        grouped[building][floor].photos.push(photo)
+        
+        // Only add submission once per building/floor combination
+        if (!grouped[building][floor].submissions.find(s => s.id === submission.id)) {
+          grouped[building][floor].submissions.push(submission)
+        }
       })
     })
 
@@ -211,10 +206,11 @@ export default function PhotoGalleryPage() {
   }
 
   const getUniqueSchools = () => {
-    const schools = submissions
-      .map((sub) => sub.walkers?.school)
+    // Get unique building names from photos, fallback to walker schools
+    const buildings = submissions
+      .flatMap((sub) => sub.photos.map((photo) => photo.building || sub.walkers?.school))
       .filter(Boolean) as string[]
-    return [...new Set(schools)]
+    return [...new Set(buildings)]
   }
 
   const getUniqueFloors = () => {
@@ -360,7 +356,18 @@ export default function PhotoGalleryPage() {
                   <SelectItem value="all">All Floors</SelectItem>
                   {getUniqueFloors().map((floor) => (
                     <SelectItem key={floor} value={floor}>
-                      {floor === "first" ? "First Floor" : floor === "second" ? "Second Floor" : floor}
+                      {floor === "basement" ? "Basement" :
+                       floor === "first" ? "First Floor" :
+                       floor === "second" ? "Second Floor" :
+                       floor === "third" ? "Third Floor" :
+                       floor === "fourth" ? "Fourth Floor" :
+                       floor === "fifth" ? "Fifth Floor" :
+                       floor === "sixth" ? "Sixth Floor" :
+                       floor === "seventh" ? "Seventh Floor" :
+                       floor === "eighth" ? "Eighth Floor" :
+                       floor === "ninth" ? "Ninth Floor" :
+                       floor === "tenth" ? "Tenth Floor" :
+                       floor}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -454,8 +461,17 @@ export default function PhotoGalleryPage() {
                                   <MapPin className="w-4 h-4 text-orange-600" />
                                   <div>
                                     <h4 className="font-medium text-gray-800">
-                                      {floor === "first" ? "First Floor" : 
-                                       floor === "second" ? "Second Floor" : 
+                                      {floor === "basement" ? "Basement" :
+                                       floor === "first" ? "First Floor" : 
+                                       floor === "second" ? "Second Floor" :
+                                       floor === "third" ? "Third Floor" :
+                                       floor === "fourth" ? "Fourth Floor" :
+                                       floor === "fifth" ? "Fifth Floor" :
+                                       floor === "sixth" ? "Sixth Floor" :
+                                       floor === "seventh" ? "Seventh Floor" :
+                                       floor === "eighth" ? "Eighth Floor" :
+                                       floor === "ninth" ? "Ninth Floor" :
+                                       floor === "tenth" ? "Tenth Floor" :
                                        floor}
                                     </h4>
                                     <p className="text-xs text-gray-600">

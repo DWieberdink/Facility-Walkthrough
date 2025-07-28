@@ -108,7 +108,7 @@ export function PhotoUploadComponent({
     }
   }
 
-  const handleLocationSelected = async (x: number, y: number, floor: string) => {
+  const handleLocationSelected = async (x: number, y: number, floor: string, building: string) => {
     if (!pendingPhotoId) {
       console.error("No pending photo ID for location update")
       return
@@ -116,7 +116,7 @@ export function PhotoUploadComponent({
 
     try {
       // Update the photo record with location information
-      const updatedRecord = await updatePhotoLocation(pendingPhotoId, x, y, floor)
+      const updatedRecord = await updatePhotoLocation(pendingPhotoId, x, y, floor, building)
 
       setPhotoLocation({ x, y, floor })
       setLocationSaved(true)
@@ -126,6 +126,7 @@ export function PhotoUploadComponent({
         x: x.toFixed(2),
         y: y.toFixed(2),
         floor,
+        building,
       })
 
       // Complete the upload process

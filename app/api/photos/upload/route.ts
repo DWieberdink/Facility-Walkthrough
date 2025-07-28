@@ -69,8 +69,7 @@ export async function POST(req: Request) {
         file_size: fileSize,
         mime_type: fileType,
         caption,
-        // Temporarily comment out building field until column is added manually
-        // building,
+        building,
         // Initialize location fields as null - will be updated when user confirms location
         location_x: null,
         location_y: null,
@@ -85,8 +84,9 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ record })
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : "Server error"
     console.error("Photo upload route error:", err)
-    return NextResponse.json({ error: err.message ?? "Server error" }, { status: 500 })
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
